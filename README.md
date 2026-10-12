@@ -12,6 +12,13 @@ npm start          # runs server.js at http://localhost:8080 (Node 18+)
 
 Any static web server also works, for example `python3 -m http.server 8080`, but then there are no live flights (see below). The page has to be served over http, because opening `index.html` as a file will not load the models.
 
+### Letting visitors play without a token
+
+Two things spare a visitor from making a Cesium ion account:
+
+- The token box has a **Play without a token** button. It opens the game with `?simple`: the OpenStreetMap street map on a smooth globe, with no 3D buildings or terrain. Search, trips, airports, runways and the views all work.
+- Whoever hosts the game can put a token of their own in `src/config.js`, and every visitor then gets the full 3D map at once. That file is public, so use a separate token limited to the `assets:read` and `geocode` scopes and to your site's address, never your Default token. Visitors' use counts against that account's monthly limits.
+
 ### Hosting on GitHub Pages
 
 Go to **Settings → Pages** in the repository and choose "Deploy from a branch", with branch `main` and folder `/ (root)`. The game is plain HTML and JavaScript, so there is no build step.
@@ -88,7 +95,7 @@ Open `http://localhost:8080/?offline` to run the game on a plain globe with no i
 
 - CesiumJS © Cesium GS, Inc. ([Apache 2.0](https://github.com/CesiumGS/cesium/blob/main/LICENSE.md)), loaded from jsDelivr.
 - The plane model (`Cesium_Air.glb`) is a CesiumJS sample model © Cesium GS, Inc. ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).
-- Map data: Google, Cesium, OpenStreetMap contributors and Microsoft Bing, credited on screen.
+- Map data: Google, Cesium, OpenStreetMap contributors and Microsoft Bing, credited on screen. The street map without a token is © OpenStreetMap contributors, from openstreetmap.org's own tile server, which is meant for light use.
 - Address search: [Nominatim](https://nominatim.org) and [Photon](https://photon.komoot.io) by Komoot, © OpenStreetMap contributors.
 - Airports and runways: [OurAirports](https://ourairports.com/data/), public domain.
 - Live flights: [adsb.lol](https://adsb.lol), open data under the [ODbL](https://opendatacommons.org/licenses/odbl/).

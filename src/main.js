@@ -1,6 +1,7 @@
 import { createState, updatePlane, offset } from "./physics.js";
 import { PLACES } from "./places.js";
 import { createInput } from "./input.js";
+import { PUBLIC_ION_TOKEN } from "./config.js";
 import { createFacade } from "./facade.js";
 import { createFlights } from "./flights.js";
 import { labelBuildings } from "./labels.js";
@@ -39,7 +40,11 @@ const QUALITY_KEY = "dubai3d.quality";
 
 // ?offline runs on a plain globe with no Cesium ion data (used for local testing).
 const params = new URLSearchParams(window.location.search);
-const OFFLINE = params.has("offline");
+// ?simple does the same but draws the OpenStreetMap street map on the globe,
+// for visitors who want to try the game without a Cesium ion token.
+const SIMPLE = params.has("simple");
+const OFFLINE = SIMPLE || params.has("offline");
+const STREET_MAP_URL = "https://tile.openstreetmap.org/";
 
 const PLANE_SPAWN_HEIGHT = 350;
 // Chase camera: distance behind the plane and how far down it looks (radians).
@@ -116,12 +121,17 @@ $("token-form").addEventListener("submit", (e) => {
 
 $("change-token").addEventListener("click", () => showTokenDialog());
 
+$("token-skip").addEventListener("click", () => {
+  window.location.search = "?simple";
+});
+
 // ---------------------------------------------------------------- boot
 
 boot();
 
 async function boot() {
-  const token = storageGet(TOKEN_KEY);
+  // A visitor's own token wins over the one the host put in config.js.
+  const token = storageGet(TOKEN_KEY) || PUBLIC_ION_TOKEN;
   if (!token && !OFFLINE) {
     showTokenDialog();
     return;
@@ -224,6 +234,14 @@ async function startGame() {
     if (ultra) applyUltra(viewer, buildings);
   } else {
     scene.globe.baseColor = Cesium.Color.fromCssColorString("#c9b98f");
+    if (SIMPLE) {
+      viewer.imageryLayers.addImageryProvider(
+        new Cesium.OpenStreetMapImageryProvider({ url: STREET_MAP_URL, maximumLevel: 18 })
+      );
+      // The other choices in this menu need a token.
+      $("data-select").disabled = true;
+      $("data-select").title = "3D buildings need a Cesium ion token: use Change token below";
+    }
     if (ultra) applyUltra(viewer, null);
   }
 

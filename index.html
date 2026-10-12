@@ -22,6 +22,29 @@
         <button id="mode-car" title="Car (2)">Car</button>
         <button id="mode-plane" title="Plane (3)">Plane</button>
       </div>
+      <div id="nav">
+        <form id="search-form">
+          <label for="search-input">Search address</label>
+          <div class="row">
+            <input id="search-input" type="search" autocomplete="off" placeholder="Dubai Mall" />
+            <button type="submit">Go</button>
+          </div>
+        </form>
+        <form id="route-form">
+          <label for="route-from">Route from</label>
+          <input id="route-from" type="search" autocomplete="off" placeholder="Where I am now" />
+          <label for="route-to">to</label>
+          <input id="route-to" type="search" autocomplete="off" placeholder="Burj Al Arab" />
+          <div class="row">
+            <button type="submit">Show route</button>
+            <button type="button" id="route-clear">Clear</button>
+          </div>
+        </form>
+        <div id="nav-status" aria-live="polite"></div>
+      </div>
+      <div id="plane-tools" hidden>
+        <button id="fly-burj" title="Fly to Burj Khalifa (B)">Fly to Burj Khalifa (B)</button>
+      </div>
       <label>
         Buildings
         <select id="data-select">
@@ -41,6 +64,7 @@
       <div id="hud-alt"></div>
       <div id="hud-throttle"></div>
       <div id="hud-heading"></div>
+      <div id="hud-target"></div>
     </div>
 
     <div id="hud-message" hidden></div>
@@ -56,7 +80,8 @@
         <tr><td>Space</td><td></td><td>Handbrake</td><td></td></tr>
         <tr><td>Mouse</td><td>Click the map to look around, Esc to release</td><td></td><td></td></tr>
       </table>
-      <p>1, 2, 3 or C switch mode. V switches between chase and inside view. R goes back to the start point. H hides this.</p>
+      <p>1, 2, 3 or C switch mode. V switches between chase and inside view. R goes back to the start point. B flies to Burj Khalifa. H hides this.</p>
+      <p>On foot or by car, use the panel to search for an address or to draw a road route between two places.</p>
     </div>
 
     <div id="token-dialog" hidden>

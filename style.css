@@ -91,6 +91,64 @@ input {
   font-weight: 600;
 }
 
+#nav,
+#nav form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#nav {
+  gap: 10px;
+}
+
+#nav .row {
+  display: flex;
+  gap: 6px;
+}
+
+#nav .row input {
+  flex: 1;
+  min-width: 0;
+}
+
+#nav button,
+#plane-tools button {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #39414d;
+  background: #0d1015;
+  color: var(--panel-text);
+  cursor: pointer;
+}
+
+#nav button[type="submit"] {
+  flex: 1;
+}
+
+#nav button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#plane-tools button {
+  width: 100%;
+}
+
+#nav-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#nav-status:empty {
+  display: none;
+}
+
+#nav-status.error {
+  color: #ff8a80;
+}
+
 .links {
   display: flex;
   justify-content: space-between;
@@ -131,6 +189,10 @@ button.link {
 #hud-throttle,
 #hud-heading {
   color: var(--muted);
+}
+
+#hud-target {
+  color: var(--accent);
 }
 
 #hud-message {

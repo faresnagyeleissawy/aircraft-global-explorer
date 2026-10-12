@@ -1,6 +1,7 @@
-import { createState, updaters, WALK } from "./physics.js";
+import { createState, updaters, offset, WALK } from "./physics.js";
 import { PLACES } from "./places.js";
 import { createInput } from "./input.js";
+import { BURJ_KHALIFA, bearing, createRoute, distance, formatDistance, parseLatLon, remaining } from "./route.js";
 
 const Cesium = window.Cesium;
 
@@ -16,6 +17,9 @@ const MODES = ["walk", "car", "plane"];
 const MODE_LABELS = { walk: "Walk", car: "Car", plane: "Plane" };
 const PLANE_SPAWN_HEIGHT = 350;
 const RESPAWN_DELAY = 2.5;
+const ARRIVE_DISTANCE = 25;
+// Public OSRM demo server: free, no key, best effort.
+const ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
 
 const $ = (id) => document.getElementById(id);
 
@@ -128,13 +132,13 @@ async function startGame() {
     console.warn("sampleHeight is not supported by this browser; ground following will be approximate.");
   }
 
-  const game = createGame(viewer);
+  const game = createGame(viewer, dataMode);
   game.start();
 }
 
 // ---------------------------------------------------------------- game
 
-function createGame(viewer) {
+function createGame(viewer, dataMode) {
   const scene = viewer.scene;
   const camera = viewer.camera;
   const HPR = Cesium.HeadingPitchRoll;
@@ -149,6 +153,10 @@ function createGame(viewer) {
   let camHeading = 0;
   let lastTime = performance.now();
   let lastGround; // most recent ground height under the player
+  let route = null; // active point-to-point route, see route.js
+  let routeEntities = [];
+  let flashText = "";
+  let flashUntil = 0;
 
   const input = createInput(onAction);
 
@@ -199,6 +207,159 @@ function createGame(viewer) {
     if (h !== undefined) return h;
     return mode === "plane" ? undefined : state.height;
   }
+
+  // ------------------------------------------------------------ search and routes
+
+  const toDeg = Cesium.Math.toDegrees;
+  const toRad = Cesium.Math.toRadians;
+  const here = () => ({ lon: toDeg(state.lon), lat: toDeg(state.lat) });
+
+  // Google's terms need Google geocoding on top of the photorealistic tiles.
+  const geocoder = OFFLINE
+    ? null
+    : new Cesium.IonGeocoderService({
+        scene,
+        geocodeProviderType:
+          dataMode === "google" ? Cesium.IonGeocodeProviderType.GOOGLE : Cesium.IonGeocodeProviderType.DEFAULT,
+      });
+
+  async function findAddress(text) {
+    const coords = parseLatLon(text);
+    if (coords) return { ...coords, name: text.trim() };
+    if (!geocoder) {
+      // Offline there is no geocoder, so only the built-in places and "lat, lon" work.
+      const known = PLACES.find((p) => p.name.toLowerCase().includes(text.trim().toLowerCase()));
+      if (!known) throw new Error('Offline mode only knows the "Start at" places and "lat, lon".');
+      return { lon: known.lon, lat: known.lat, name: known.name };
+    }
+    const query = /dubai|uae|emirates/i.test(text) ? text : text + ", Dubai";
+    const results = await geocoder.geocode(query);
+    if (!results.length) throw new Error('No place found for "' + text.trim() + '".');
+    const dest = results[0].destination;
+    const carto =
+      dest instanceof Cesium.Rectangle ? Cesium.Rectangle.center(dest) : Cesium.Cartographic.fromCartesian(dest);
+    return { lon: toDeg(carto.longitude), lat: toDeg(carto.latitude), name: results[0].displayName };
+  }
+
+  async function fetchRoute(from, to) {
+    const pair = [from, to].map((p) => p.lon.toFixed(6) + "," + p.lat.toFixed(6)).join(";");
+    let data;
+    try {
+      const res = await fetch(ROUTE_URL + pair + "?overview=full&geometries=geojson");
+      data = await res.json();
+    } catch {
+      throw new Error("The route service did not answer. Try again in a moment.");
+    }
+    if (data.code !== "Ok" || !data.routes || !data.routes.length) {
+      throw new Error("No road route found between those points.");
+    }
+    const points = data.routes[0].geometry.coordinates.map(([lon, lat]) => ({ lon, lat }));
+    if (points.length < 2) throw new Error("Those two points are the same place.");
+    return points;
+  }
+
+  function marker(point, text) {
+    return viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat),
+      point: {
+        pixelSize: 14,
+        color: Cesium.Color.fromCssColorString("#f0b429"),
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text,
+        font: "600 14px sans-serif",
+        showBackground: true,
+        pixelOffset: new Cesium.Cartesian2(0, -24),
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+  }
+
+  function showRoute(points) {
+    clearRoute();
+    route = createRoute(points);
+    const line = viewer.entities.add({
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArray(points.flatMap((p) => [p.lon, p.lat])),
+        width: 8,
+        clampToGround: true,
+        classificationType: Cesium.ClassificationType.BOTH,
+        material: Cesium.Color.fromCssColorString("#f0b429").withAlpha(0.85),
+      },
+    });
+    routeEntities = [line, marker(points[0], "Start"), marker(points[points.length - 1], "Destination")];
+    // The line and markers must not count as ground under the player.
+    exclude.push(...routeEntities);
+  }
+
+  function clearRoute() {
+    for (const e of routeEntities) viewer.entities.remove(e);
+    exclude.length -= routeEntities.length;
+    routeEntities = [];
+    route = null;
+  }
+
+  // Runs a search from the panel: shows progress, reports errors, and hands
+  // the keyboard back to the game afterwards.
+  async function runNav(task) {
+    const status = $("nav-status");
+    const buttons = $("nav").querySelectorAll("button");
+    status.classList.remove("error");
+    status.textContent = "Searching…";
+    buttons.forEach((b) => (b.disabled = true));
+    try {
+      status.textContent = await task();
+    } catch (err) {
+      console.error(err);
+      status.classList.add("error");
+      status.textContent = err && err.message ? err.message : String(err);
+    }
+    buttons.forEach((b) => (b.disabled = false));
+    if (document.activeElement) document.activeElement.blur();
+  }
+
+  $("search-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const text = $("search-input").value;
+    if (!text.trim()) return;
+    runNav(async () => {
+      const found = await findAddress(text);
+      placeAt(found.lon, found.lat, state.heading);
+      return "Moved to " + found.name;
+    });
+  });
+
+  $("route-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const fromText = $("route-from").value;
+    const toText = $("route-to").value;
+    if (!toText.trim()) return;
+    runNav(async () => {
+      const to = await findAddress(toText);
+      const from = fromText.trim() ? await findAddress(fromText) : here();
+      const points = await fetchRoute(from, to);
+      showRoute(points);
+      // With a typed start you are put on the road there, facing along the route.
+      if (fromText.trim()) placeAt(points[0].lon, points[0].lat, bearing(points[0], points[1]));
+      return "Follow the yellow line: " + formatDistance(route.length) + " to " + to.name;
+    });
+  });
+
+  $("route-clear").addEventListener("click", (e) => {
+    clearRoute();
+    $("nav-status").textContent = "";
+    e.currentTarget.blur();
+  });
+
+  $("fly-burj").addEventListener("click", (e) => {
+    flyToBurjKhalifa();
+    e.currentTarget.blur();
+  });
 
   // ------------------------------------------------------------ UI wiring
 
@@ -258,13 +419,20 @@ function createGame(viewer) {
     else if (code === "KeyV") view = view === "chase" ? "inside" : "chase";
     else if (code === "KeyR") spawn();
     else if (code === "KeyH") toggleHelp();
+    else if (code === "KeyB") flyToBurjKhalifa();
   }
 
   // ------------------------------------------------------------ modes
 
   function spawn() {
-    const heading = Cesium.Math.toRadians(place.heading);
-    state = createState(Cesium.Math.toRadians(place.lon), Cesium.Math.toRadians(place.lat), PLANE_SPAWN_HEIGHT, heading);
+    // Flying from Downtown starts with the tower in front of you.
+    if (mode === "plane" && place.id === "downtown") flyToBurjKhalifa();
+    else placeAt(place.lon, place.lat, toRad(place.heading));
+  }
+
+  // Puts the player above a point (degrees). On foot or wheels they then drop to the ground.
+  function placeAt(lon, lat, heading, height = PLANE_SPAWN_HEIGHT) {
+    state = createState(toRad(lon), toRad(lat), height, heading);
     camHeading = heading;
     crashTimer = 0;
     lastGround = undefined;
@@ -275,6 +443,15 @@ function createGame(viewer) {
       pendingDrop = true;
     }
     showMessage(mode === "plane" ? "" : "Loading the ground…");
+  }
+
+  // Starts a flight 3 km south-west of Burj Khalifa, aimed just to the right
+  // of the tower so it stays in view as you pass it.
+  function flyToBurjKhalifa() {
+    if (mode !== "plane") setMode("plane");
+    const start = offset(toRad(BURJ_KHALIFA.lon), toRad(BURJ_KHALIFA.lat), 3000, toRad(225));
+    placeAt(toDeg(start.lon), toDeg(start.lat), toRad(52), 500);
+    flash("Burj Khalifa ahead", 4);
   }
 
   function setMode(next) {
@@ -316,6 +493,8 @@ function createGame(viewer) {
     car.show = mode === "car" && view === "chase";
     plane.show = mode === "plane" && view === "chase";
     $("hud-mode").textContent = MODE_LABELS[mode];
+    $("nav").hidden = mode === "plane";
+    $("plane-tools").hidden = mode !== "plane";
   }
 
   // ------------------------------------------------------------ loop
@@ -405,6 +584,38 @@ function createGame(viewer) {
 
   // ------------------------------------------------------------ HUD
 
+  // Shows a message for a few seconds, unless something more urgent replaces it.
+  function flash(text, seconds) {
+    flashText = text;
+    flashUntil = performance.now() + seconds * 1000;
+  }
+
+  // Distance and direction (relative to where you face) to a point in degrees.
+  function pointer(label, target, meters) {
+    const turn = bearing(here(), target) - state.heading;
+    const arrow = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"][((Math.round(turn / (Math.PI / 4)) % 8) + 8) % 8];
+    return label + " " + arrow + " " + formatDistance(meters);
+  }
+
+  function updateTarget() {
+    if (mode === "plane") {
+      $("hud-target").textContent = pointer(BURJ_KHALIFA.name, BURJ_KHALIFA, distance(here(), BURJ_KHALIFA));
+      return;
+    }
+    if (!route) {
+      $("hud-target").textContent = "";
+      return;
+    }
+    const left = remaining(route, here());
+    const next = route.points[Math.min(route.index + 1, route.points.length - 1)];
+    $("hud-target").textContent = pointer("Destination", next, left);
+    if (left < ARRIVE_DISTANCE) {
+      clearRoute();
+      $("nav-status").textContent = "";
+      flash("You have arrived", 4);
+    }
+  }
+
   function showMessage(text) {
     $("hud-message").textContent = text;
     $("hud-message").hidden = !text;
@@ -418,9 +629,9 @@ function createGame(viewer) {
     $("hud-throttle").textContent = mode === "plane" ? "Throttle " + Math.round(state.throttle * 100) + "%" : "";
     const deg = Math.round(Cesium.Math.toDegrees(state.heading) + 360) % 360;
     $("hud-heading").textContent = deg + "° " + compass(deg);
+    updateTarget();
     if (!state.crashed && !pendingDrop) {
-      $("hud-message").hidden = !state.blocked;
-      if (state.blocked) $("hud-message").textContent = "Blocked";
+      showMessage(state.blocked ? "Blocked" : performance.now() < flashUntil ? flashText : "");
     }
   }
 

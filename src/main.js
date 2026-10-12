@@ -1,6 +1,7 @@
 import { createState, updaters, offset, WALK } from "./physics.js";
 import { PLACES } from "./places.js";
 import { createInput } from "./input.js";
+import { createFacade } from "./facade.js";
 import { BURJ_KHALIFA, bearing, createRoute, distance, formatDistance, parseLatLon, remaining } from "./route.js";
 
 const Cesium = window.Cesium;
@@ -22,6 +23,8 @@ const ARRIVE_DISTANCE = 25;
 const ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
 // OpenStreetMap's Nominatim geocoder: free, no key, at most one search a second.
 const GEOCODE_URL = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=en";
+// Street level in Dubai, in meters above the ellipsoid (sea level is about -32 m there).
+const DUBAI_GROUND = -28;
 const DUBAI_BOX = "54.85,25.40,55.65,24.75"; // west, north, east, south
 
 const $ = (id) => document.getElementById(id);
@@ -127,15 +130,20 @@ async function startGame() {
     scene.globe.show = false;
   } else if (dataMode === "osm") {
     const buildings = await Cesium.createOsmBuildingsAsync();
-    // OSM Buildings are untextured blocks. Tint them like Dubai (glass towers,
-    // sand-coloured low-rises) and cast sun shadows so they read as a city.
+    // OSM Buildings are untextured blocks. Draw windows and glass on them
+    // (facade.js), tint each building a little differently, and cast sun
+    // shadows so they read as a city.
+    const facade = createFacade(Cesium, camera, 55.27, 25.2, DUBAI_GROUND);
+    buildings.customShader = facade.shader;
+    scene.preRender.addEventListener(facade.update);
     buildings.style = new Cesium.Cesium3DTileStyle({
       color: {
         conditions: [
-          ["${feature['cesium#estimatedHeight']} > 150", "color('#7c9fc0')"],
-          ["${feature['cesium#estimatedHeight']} > 60", "color('#a7bdd0')"],
-          ["${feature['cesium#estimatedHeight']} > 20", "color('#e3dccd')"],
-          ["true", "color('#efe6d2')"],
+          ["Number(${feature['cesium#estimatedHeight']}) > 150", "color('#cfe2f5')"],
+          ["Number(${feature['cesium#estimatedHeight']}) > 60", "color('#e6eef6')"],
+          ["Number(${feature['elementId']}) % 3 === 0", "color('#fff1d6')"],
+          ["Number(${feature['elementId']}) % 3 === 1", "color('#f3e3cf')"],
+          ["true", "color('#ffffff')"],
         ],
       },
     });

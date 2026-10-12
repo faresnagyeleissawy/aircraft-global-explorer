@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dubai 3D Explorer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css" />
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Cesium.js"></script>
+  </head>
+  <body>
+    <div id="cesiumContainer"></div>
+
+    <div id="panel">
+      <div class="title">Dubai 3D Explorer</div>
+      <label>
+        Start at
+        <select id="place-select"></select>
+      </label>
+      <div class="modes">
+        <button id="mode-walk" title="Walk (1)">Walk</button>
+        <button id="mode-car" title="Car (2)">Car</button>
+        <button id="mode-plane" title="Plane (3)">Plane</button>
+      </div>
+      <label>
+        Buildings
+        <select id="data-select">
+          <option value="google">Photorealistic (Google 3D Tiles)</option>
+          <option value="osm">Simple (OSM Buildings)</option>
+        </select>
+      </label>
+      <div class="links">
+        <button id="help-toggle" class="link">Controls (H)</button>
+        <button id="change-token" class="link">Change token</button>
+      </div>
+    </div>
+
+    <div id="hud">
+      <div id="hud-mode"></div>
+      <div id="hud-speed"></div>
+      <div id="hud-alt"></div>
+      <div id="hud-throttle"></div>
+      <div id="hud-heading"></div>
+    </div>
+
+    <div id="hud-message" hidden></div>
+
+    <div id="help" hidden>
+      <h2>Controls</h2>
+      <table>
+        <tr><th></th><th>Walk</th><th>Car</th><th>Plane</th></tr>
+        <tr><td>↑ / ↓</td><td>Forward / back</td><td>Accelerate / brake, reverse</td><td>Climb / dive</td></tr>
+        <tr><td>← / →</td><td>Turn</td><td>Steer</td><td>Bank and turn</td></tr>
+        <tr><td>Shift</td><td>Run</td><td>Boost</td><td>More throttle</td></tr>
+        <tr><td>W / S</td><td></td><td></td><td>Throttle up / down</td></tr>
+        <tr><td>Space</td><td></td><td>Handbrake</td><td></td></tr>
+        <tr><td>Mouse</td><td>Click the map to look around, Esc to release</td><td></td><td></td></tr>
+      </table>
+      <p>1, 2, 3 or C switch mode. V switches between chase and inside view. R goes back to the start point. H hides this.</p>
+    </div>
+
+    <div id="token-dialog" hidden>
+      <form id="token-form">
+        <h2>Cesium ion access token</h2>
+        <p>
+          The map data comes from your free Cesium ion account. Open
+          <a href="https://ion.cesium.com/tokens" target="_blank" rel="noopener">ion.cesium.com/tokens</a>,
+          copy the Default token and paste it here. It is saved only in this browser.
+        </p>
+        <p id="token-error" class="error" hidden></p>
+        <input id="token-input" type="password" autocomplete="off" placeholder="eyJhbGciOi…" />
+        <button type="submit">Start exploring</button>
+      </form>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>

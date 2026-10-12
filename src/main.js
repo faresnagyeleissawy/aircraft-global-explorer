@@ -127,8 +127,24 @@ async function startGame() {
     scene.globe.show = false;
   } else if (dataMode === "osm") {
     const buildings = await Cesium.createOsmBuildingsAsync();
+    // OSM Buildings are untextured blocks. Tint them like Dubai (glass towers,
+    // sand-coloured low-rises) and cast sun shadows so they read as a city.
+    buildings.style = new Cesium.Cesium3DTileStyle({
+      color: {
+        conditions: [
+          ["${feature['cesium#estimatedHeight']} > 150", "color('#7c9fc0')"],
+          ["${feature['cesium#estimatedHeight']} > 60", "color('#a7bdd0')"],
+          ["${feature['cesium#estimatedHeight']} > 20", "color('#e3dccd')"],
+          ["true", "color('#efe6d2')"],
+        ],
+      },
+    });
     scene.primitives.add(buildings);
     scene.globe.depthTestAgainstTerrain = true;
+    viewer.shadows = true;
+    viewer.terrainShadows = Cesium.ShadowMode.RECEIVE_ONLY;
+    viewer.shadowMap.maximumDistance = 1500;
+    viewer.shadowMap.darkness = 0.45;
   } else {
     scene.globe.baseColor = Cesium.Color.fromCssColorString("#c9b98f");
   }

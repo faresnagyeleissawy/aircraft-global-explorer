@@ -101,6 +101,23 @@ function storageSet(key, value) {
   }
 }
 
+// ---------------------------------------------------------------- menu
+
+// The panel can be folded away. On a narrow screen it starts folded, and
+// folds again whenever the plane is sent somewhere, to show the view.
+const narrow = window.matchMedia("(max-width: 760px)");
+
+function setMenu(open) {
+  document.body.classList.toggle("menu-closed", !open);
+  $("menu-toggle").setAttribute("aria-expanded", String(open));
+}
+
+setMenu(!narrow.matches);
+$("menu-toggle").addEventListener("click", (e) => {
+  setMenu(document.body.classList.contains("menu-closed"));
+  e.currentTarget.blur();
+});
+
 // ---------------------------------------------------------------- token dialog
 
 function showTokenDialog(message) {
@@ -841,20 +858,7 @@ function createGame(viewer, dataMode, world) {
     e.currentTarget.blur();
   });
 
-  // ------------------------------------------------------------ menu and touch controls
-
-  // The panel can be folded away. On a narrow screen it starts folded, and
-  // folds again whenever the plane is sent somewhere, to show the view.
-  const narrow = window.matchMedia("(max-width: 760px)");
-  function setMenu(open) {
-    document.body.classList.toggle("menu-closed", !open);
-    $("menu-toggle").setAttribute("aria-expanded", String(open));
-  }
-  setMenu(!narrow.matches);
-  $("menu-toggle").addEventListener("click", (e) => {
-    setMenu(document.body.classList.contains("menu-closed"));
-    e.currentTarget.blur();
-  });
+  // ------------------------------------------------------------ touch controls
 
   // On-screen buttons stand in for the keyboard: held ones for the arrow keys
   // and Shift, tapped ones for the other keys and for the zoom.

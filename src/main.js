@@ -247,6 +247,7 @@ function createGame(viewer, dataMode, world) {
   let view = "chase"; // one of VIEWS
   let airports = []; // rows of data/airports.json, once loaded
   let runways = {}; // data/runways.json, once loaded: airport code -> the two ends of its longest runway
+  let demo = null; // while the demo tour plays: { spin, zoomTo, stop }
   let parked = false; // standing on the runway after landing, until an arrow key is pressed
   let trip = null; // the flight being flown from one place to another, see trip.js
   let autopilot = false; // true while the trip flies itself
@@ -755,6 +756,118 @@ function createGame(viewer, dataMode, world) {
     e.currentTarget.blur();
   });
 
+  // ------------------------------------------------------------ demo tour
+
+  // A scripted tour of the main features with captions, made to be recorded
+  // as a video. Esc stops it.
+  function caption(text) {
+    $("demo-caption").textContent = text;
+    $("demo-caption").hidden = !text;
+  }
+
+  // Waits, unless the tour is stopped meanwhile.
+  function pause(seconds) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, seconds * 1000);
+      demo.stop = () => {
+        clearTimeout(timer);
+        reject(new Error("demo stopped"));
+      };
+    });
+  }
+
+  async function typeInto(id, text) {
+    $(id).value = "";
+    for (const letter of text) {
+      $(id).value += letter;
+      await pause(0.07);
+    }
+  }
+
+  async function runDemo() {
+    if (demo) return;
+    demo = { spin: 0, zoomTo: 1, stop: null };
+    $("start-dialog").hidden = true;
+    $("help").hidden = true;
+    try {
+      caption("World 3D Explorer: fly anywhere on Earth");
+      clearRoute();
+      setView("chase");
+      flyToBurjKhalifa();
+      await pause(7);
+
+      caption("Every building in the world, in 3D");
+      demo.spin = 0.3;
+      demo.zoomTo = 3;
+      await pause(11);
+      demo.spin = 0;
+      demo.zoomTo = 1;
+      orbit = { heading: 0, pitch: 0 };
+
+      caption("Search for any address");
+      await typeInto("search-input", "Eiffel Tower, Paris");
+      await pause(0.6);
+      await travelTo(2.2885, 48.846, toRad(25));
+      $("nav-status").textContent = "Moved to Eiffel Tower, Paris, France";
+      await pause(9);
+
+      caption("Take a window seat");
+      setView("right");
+      await pause(6);
+      caption("Or the pilot's seat");
+      setView("inside");
+      await pause(4);
+      setView("chase");
+
+      if (flights.available && $("flights-toggle").checked) {
+        caption("Real flights around you, live");
+        await travelTo(-0.3, 51.44, toRad(290));
+        demo.zoomTo = 5;
+        await pause(10);
+        demo.zoomTo = 1;
+      }
+
+      const from = findAirport(airports, "DXB");
+      const to = findAirport(airports, "AUH");
+      if (from && to) {
+        caption("Fly a real trip: Dubai to Abu Dhabi, runway to runway");
+        for (const box of runwayBoxes) box.checked = true;
+        $("search-input").value = "";
+        await typeInto("route-from", "DXB");
+        await typeInto("route-to", "AUH");
+        $("nav-status").textContent = await startTrip(from, to);
+        await pause(20);
+        caption("Take-off from Dubai International");
+        await pause(33);
+        setView("left");
+        await pause(11);
+
+        caption("Landing at Abu Dhabi");
+        setView("chase");
+        trip.flown = trip.touchdown - 3000;
+        state.heading = tripState(trip, trip.flown).heading;
+        await pause(58);
+      }
+
+      caption("Try it: faresnagyeleissawy.github.io/dubai-3d-explorer");
+      await pause(6);
+    } catch (err) {
+      if (!err || err.message !== "demo stopped") console.error(err);
+    }
+    caption("");
+    demo = null;
+    orbit = { heading: 0, pitch: 0 };
+    zoom = 1;
+    setView("chase");
+  }
+
+  for (const id of ["start-demo", "play-demo"]) {
+    $(id).addEventListener("click", (e) => {
+      runDemo();
+      e.currentTarget.blur();
+    });
+  }
+
   // ------------------------------------------------------------ trip on the map
 
   // The flight stops and the map takes over: Cesium's own mouse controls move
@@ -1040,6 +1153,7 @@ function createGame(viewer, dataMode, world) {
   }
 
   function onAction(code) {
+    if (code === "Escape" && demo && demo.stop) demo.stop();
     if (!placed || picking) return; // still choosing where to fly
     if (code === "KeyV") setView(VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length]);
     else if (code === "KeyA") setAutopilot(!autopilot);
@@ -1206,6 +1320,12 @@ function createGame(viewer, dataMode, world) {
         },
       });
       return;
+    }
+
+    if (demo) {
+      // The tour moves the camera by itself: a slow circle and an eased zoom.
+      orbit.heading += demo.spin * dt;
+      zoom += (demo.zoomTo - zoom) * Math.min(1, dt * 0.8);
     }
 
     // Chase camera: trails behind the plane and swings round smoothly on turns.

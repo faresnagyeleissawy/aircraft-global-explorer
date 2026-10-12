@@ -75,6 +75,7 @@
       <div class="links">
         <button id="help-toggle" class="link">Controls (H)</button>
         <button id="choose-start" class="link">New start</button>
+        <button id="play-demo" class="link">Demo</button>
         <button id="change-token" class="link">Change token</button>
       </div>
     </div>
@@ -113,6 +114,8 @@
       </div>
     </div>
 
+    <div id="demo-caption" hidden></div>
+
     <div id="pick-bar" hidden>
       <span id="pick-text"></span>
       <button type="button" id="pick-go">Start flying</button>
@@ -133,6 +136,7 @@
       </table>
       <p>V changes the view: behind the plane, pilot's seat, left or right window seat. R goes back to the start point. B flies to Burj Khalifa. H hides this.</p>
       <p>On a trip the autopilot flies for you. Touch an arrow key to take over and press A to hand back. The Speed menu makes a long flight pass faster.</p>
+      <p>"Demo" plays a three-minute tour of everything; Esc stops it.</p>
       <p>Search takes you to any place in the world. "Trip" flies from one airport or place to another. The address you are flying over is shown under the speed. Yellow planes are real flights; click one to see which.</p>
     </div>
 
@@ -165,6 +169,7 @@
         <p id="start-error" class="error" hidden></p>
         <button type="submit">Start flying</button>
         <button type="button" id="start-map" class="second">Or pick a trip on the map: from one point to another</button>
+        <button type="button" id="start-demo" class="second">Watch the demo tour</button>
       </form>
     </div>
 

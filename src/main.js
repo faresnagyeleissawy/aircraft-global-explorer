@@ -2,7 +2,19 @@ import { createState, updaters, offset } from "./physics.js";
 import { PLACES } from "./places.js";
 import { createInput } from "./input.js";
 import { createFacade } from "./facade.js";
-import { BURJ_KHALIFA, bearing, createRoute, distance, formatDistance, parseLatLon, remaining } from "./route.js";
+import { labelBuildings } from "./labels.js";
+import { attachSuggest } from "./suggest.js";
+import {
+  BURJ_KHALIFA,
+  bearing,
+  createRoute,
+  distance,
+  formatDistance,
+  parseLatLon,
+  placeName,
+  remaining,
+  shortAddress,
+} from "./route.js";
 
 const Cesium = window.Cesium;
 
@@ -33,8 +45,15 @@ const REANCHOR_DISTANCE = 15000;
 const MAX_DROP = 400;
 // Public OSRM demo server: free, no key, best effort.
 const ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
+const NEAREST_ROAD_URL = "https://router.project-osrm.org/nearest/v1/driving/";
+const MAX_SNAP = 500; // a car is moved onto a road only if one is this close, in meters
 // OpenStreetMap's Nominatim geocoder: free, no key, at most one search a second.
 const GEOCODE_URL = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=en";
+const REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=en";
+// Photon, another free OpenStreetMap geocoder, is built for search-as-you-type
+// (Nominatim's rules do not allow that use).
+const SUGGEST_URL = "https://photon.komoot.io/api/?limit=6&lang=en";
+const INFO_SECONDS = 12;
 // Street level in Dubai, in meters above the ellipsoid (sea level is about -32 m there).
 const DUBAI_GROUND = -28;
 
@@ -161,6 +180,7 @@ async function startGame() {
       },
     });
     scene.primitives.add(buildings);
+    labelBuildings(Cesium, scene, buildings, describeBuilding);
     scene.globe.depthTestAgainstTerrain = true;
     viewer.shadows = true;
     viewer.terrainShadows = Cesium.ShadowMode.RECEIVE_ONLY;
@@ -176,6 +196,23 @@ async function startGame() {
 
   const game = createGame(viewer, dataMode, { facade, terrain: terrainReady ? await terrainReady : null });
   game.start();
+}
+
+// ---------------------------------------------------------------- buildings
+
+// Name and street address of an OSM building, as far as OpenStreetMap has them.
+function buildingText(feature) {
+  const address = [feature.getProperty("addr:housenumber"), feature.getProperty("addr:street")].filter(Boolean).join(" ");
+  return [feature.getProperty("name"), address].filter(Boolean).join("\n");
+}
+
+// What labels.js needs to label an OSM building, or null for one with no name or address.
+function describeBuilding(feature) {
+  const text = buildingText(feature);
+  const lon = Number(feature.getProperty("cesium#longitude"));
+  const lat = Number(feature.getProperty("cesium#latitude"));
+  if (!text || !Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+  return { text, lon, lat, height: Number(feature.getProperty("cesium#estimatedHeight")) || 10 };
 }
 
 // ---------------------------------------------------------------- game
@@ -200,6 +237,8 @@ function createGame(viewer, dataMode, world) {
   let lastGround; // most recent ground height under the player
   let route = null; // active point-to-point route, see route.js
   let routeEntities = [];
+  let info = null; // label left by the last click on the map
+  let infoTimer = 0;
   let flashText = "";
   let flashUntil = 0;
   let reanchoring = false;
@@ -247,7 +286,15 @@ function createGame(viewer, dataMode, world) {
     show: false,
   });
   const models = { car, drone, plane };
-  const exclude = [car, drone, plane];
+  const exclude = [];
+
+  // Our own models, lines and labels must not count as ground under the player.
+  function refreshExclude() {
+    exclude.length = 0;
+    exclude.push(car, drone, plane, ...routeEntities);
+    if (info) exclude.push(info);
+  }
+  refreshExclude();
 
   // Height of whatever is rendered under (lon, lat): buildings, mesh or terrain.
   function sampleGround(lon, lat) {
@@ -305,10 +352,7 @@ function createGame(viewer, dataMode, world) {
     if (googleGeocoder) {
       const results = await googleGeocoder.geocode(text.trim());
       if (!results.length) throw missing;
-      const dest = results[0].destination;
-      const carto =
-        dest instanceof Cesium.Rectangle ? Cesium.Rectangle.center(dest) : Cesium.Cartographic.fromCartesian(dest);
-      return { lon: toDeg(carto.longitude), lat: toDeg(carto.latitude), name: results[0].displayName };
+      return fromGoogle(results[0]);
     }
     // Anywhere in the world: the best-known match wins, as on a map site.
     const row = await nominatim(text);
@@ -316,6 +360,52 @@ function createGame(viewer, dataMode, world) {
     const parts = row.display_name.split(", ");
     const name = parts.length > 3 ? [parts[0], parts[1], parts[parts.length - 1]].join(", ") : row.display_name;
     return { lon: Number(row.lon), lat: Number(row.lat), name };
+  }
+
+  function fromGoogle(result) {
+    const dest = result.destination;
+    const carto =
+      dest instanceof Cesium.Rectangle ? Cesium.Rectangle.center(dest) : Cesium.Cartographic.fromCartesian(dest);
+    return { lon: toDeg(carto.longitude), lat: toDeg(carto.latitude), name: result.displayName };
+  }
+
+  // Places matching what has been typed so far, for the list under a search box.
+  async function suggestPlaces(text) {
+    if (googleGeocoder) {
+      const results = await googleGeocoder.geocode(text, Cesium.GeocodeType.AUTOCOMPLETE);
+      return results.filter((r) => r.destination).slice(0, 6).map(fromGoogle);
+    }
+    const h = here();
+    const near = "&lat=" + h.lat.toFixed(3) + "&lon=" + h.lon.toFixed(3);
+    const res = await fetch(SUGGEST_URL + near + "&q=" + encodeURIComponent(text));
+    const data = await res.json();
+    return (data.features || [])
+      .map((f) => ({ lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], name: placeName(f.properties) }))
+      .filter((place, i, all) => place.name && all.findIndex((other) => other.name === place.name) === i);
+  }
+
+  // Address of a point in degrees, or "" when it has none or cannot be looked up.
+  async function reverseGeocode(lon, lat) {
+    try {
+      const res = await fetch(REVERSE_URL + "&lat=" + lat.toFixed(6) + "&lon=" + lon.toFixed(6));
+      const data = await res.json();
+      return data.display_name ? shortAddress(data.display_name) : "";
+    } catch {
+      return "";
+    }
+  }
+
+  // The closest point on a road, or the point itself when no road is near.
+  async function nearestRoad(lon, lat) {
+    try {
+      const res = await fetch(NEAREST_ROAD_URL + lon.toFixed(6) + "," + lat.toFixed(6));
+      const data = await res.json();
+      const hit = data.waypoints && data.waypoints[0];
+      if (hit && hit.distance < MAX_SNAP) return { lon: hit.location[0], lat: hit.location[1] };
+    } catch {
+      // Fall through: staying off the road is better than not travelling.
+    }
+    return { lon, lat };
   }
 
   async function fetchRoute(from, to) {
@@ -373,15 +463,64 @@ function createGame(viewer, dataMode, world) {
       },
     });
     routeEntities = [line, marker(points[0], "Start"), marker(points[points.length - 1], "Destination")];
-    // The line and markers must not count as ground under the player.
-    exclude.push(...routeEntities);
+    refreshExclude();
   }
 
   function clearRoute() {
     for (const e of routeEntities) viewer.entities.remove(e);
-    exclude.length -= routeEntities.length;
     routeEntities = [];
     route = null;
+    refreshExclude();
+  }
+
+  // Pins a label to a spot on the map for a few seconds.
+  function showInfo(spot, text) {
+    clearInfo();
+    info = viewer.entities.add({
+      position: spot,
+      point: {
+        pixelSize: 8,
+        color: Cesium.Color.fromCssColorString("#f0b429"),
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text,
+        font: "600 14px sans-serif",
+        showBackground: true,
+        pixelOffset: new Cesium.Cartesian2(0, -16),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+    refreshExclude();
+    infoTimer = setTimeout(clearInfo, INFO_SECONDS * 1000);
+  }
+
+  function clearInfo() {
+    clearTimeout(infoTimer);
+    if (info) viewer.entities.remove(info);
+    info = null;
+    refreshExclude();
+  }
+
+  // Each search box offers a list of matching places while you type. A place
+  // picked from the list is remembered, so it is used as it is rather than
+  // searched for again.
+  const picked = new Map();
+  const suggest = {};
+  for (const id of ["search-input", "route-from", "route-to"]) {
+    suggest[id] = attachSuggest($(id), suggestPlaces, (place) => {
+      picked.set(id, place);
+      if (id === "search-input") $("search-form").requestSubmit();
+    });
+  }
+
+  function resolvePlace(id) {
+    suggest[id].cancel();
+    const place = picked.get(id);
+    return place && place.name === $(id).value ? Promise.resolve(place) : findAddress($(id).value);
   }
 
   // Runs a search from the panel: shows progress, reports errors, and hands
@@ -408,7 +547,7 @@ function createGame(viewer, dataMode, world) {
     const text = $("search-input").value;
     if (!text.trim()) return;
     runNav(async () => {
-      const found = await findAddress(text);
+      const found = await resolvePlace("search-input");
       await travelTo(found.lon, found.lat, state.heading);
       return "Moved to " + found.name;
     });
@@ -420,12 +559,15 @@ function createGame(viewer, dataMode, world) {
     const toText = $("route-to").value;
     if (!toText.trim()) return;
     runNav(async () => {
-      const to = await findAddress(toText);
-      const from = fromText.trim() ? await findAddress(fromText) : here();
+      const to = await resolvePlace("route-to");
+      const from = fromText.trim() ? await resolvePlace("route-from") : here();
       const points = await fetchRoute(from, to);
       showRoute(points);
-      // With a typed start you are put on the road there, facing along the route.
-      if (fromText.trim()) await travelTo(points[0].lon, points[0].lat, bearing(points[0], points[1]));
+      // A car always starts exactly on the first point of the line, facing
+      // along it. Flying, you are only moved when you typed a start.
+      if (mode === "car" || fromText.trim()) {
+        await travelTo(points[0].lon, points[0].lat, bearing(points[0], points[1]), false);
+      }
       return "Follow the yellow line: " + formatDistance(route.length) + " to " + to.name;
     });
   });
@@ -487,15 +629,45 @@ function createGame(viewer, dataMode, world) {
   );
   // Cesium's own double-click would lock the camera onto the clicked vehicle.
   viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
-  canvas.addEventListener("dblclick", (e) => {
+
+  function mousePoint(e) {
     const box = canvas.getBoundingClientRect();
-    const point = new Cesium.Cartesian2(e.clientX - box.left, e.clientY - box.top);
-    const ray = camera.getPickRay(point);
+    return new Cesium.Cartesian2(e.clientX - box.left, e.clientY - box.top);
+  }
+
+  // The point of the scene under a canvas position, if there is one.
+  function pickSpot(point) {
     let spot = scene.pickPositionSupported ? scene.pickPosition(point) : undefined;
+    const ray = camera.getPickRay(point);
     if (!Cesium.defined(spot) && ray && scene.globe.show) spot = scene.globe.pick(ray, scene);
-    if (!Cesium.defined(spot)) return;
+    return Cesium.defined(spot) && Cesium.Cartographic.fromCartesian(spot) ? spot : undefined;
+  }
+
+  // A click labels the building or spot under the mouse with its name and
+  // address: from the building's own data if it has any, otherwise looked up.
+  async function identify(point) {
+    const spot = pickSpot(point);
+    if (!spot) return;
+    const feature = scene.pick(point);
+    let text = feature instanceof Cesium.Cesium3DTileFeature ? buildingText(feature) : "";
+    if (!text && !googleGeocoder) {
+      const there = Cesium.Cartographic.fromCartesian(spot);
+      text = await reverseGeocode(toDeg(there.longitude), toDeg(there.latitude));
+    }
+    if (text) showInfo(spot, text);
+  }
+
+  let clickTimer = 0;
+  canvas.addEventListener("click", (e) => {
+    const point = mousePoint(e);
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => identify(point), 300); // long enough for a double-click to cancel it
+  });
+  canvas.addEventListener("dblclick", (e) => {
+    clearTimeout(clickTimer);
+    const spot = pickSpot(mousePoint(e));
+    if (!spot) return;
     const there = Cesium.Cartographic.fromCartesian(spot);
-    if (!there) return;
     travelTo(toDeg(there.longitude), toDeg(there.latitude), state.heading);
   });
 
@@ -533,9 +705,11 @@ function createGame(viewer, dataMode, world) {
     }
   }
 
-  // Sends the player to a point anywhere in the world (degrees).
-  async function travelTo(lon, lat, heading) {
-    placeAt(lon, lat, heading, await terrainHeight(lon, lat));
+  // Sends the player to a point anywhere in the world (degrees). A car is put
+  // on the nearest road, unless the point is already known to be on one.
+  async function travelTo(lon, lat, heading, snapToRoad = true) {
+    const spot = snapToRoad && mode === "car" ? await nearestRoad(lon, lat) : { lon, lat };
+    placeAt(spot.lon, spot.lat, heading, await terrainHeight(spot.lon, spot.lat));
   }
 
   // Midday sun wherever the player is, so buildings are lit from above.

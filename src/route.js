@@ -63,6 +63,19 @@ export function remaining(route, here) {
   return bestDist + toEnd[best];
 }
 
+// One-line name for a place from OpenStreetMap address parts, as returned by
+// the Photon geocoder: "Dubai Mall, Dubai, United Arab Emirates".
+export function placeName(p) {
+  const street = [p.housenumber, p.street].filter(Boolean).join(" ");
+  const parts = [p.name || street, p.name ? street : "", p.city || p.county, p.state, p.country];
+  return parts.filter((part, i) => part && parts.indexOf(part) === i).join(", ");
+}
+
+// First few parts of a long comma-separated address.
+export function shortAddress(text, parts = 3) {
+  return text.split(", ").slice(0, parts).join(", ");
+}
+
 export function formatDistance(meters) {
   return meters >= 1000 ? (meters / 1000).toFixed(1) + " km" : Math.round(meters / 10) * 10 + " m";
 }

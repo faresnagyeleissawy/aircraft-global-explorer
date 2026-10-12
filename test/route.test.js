@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { distance, bearing, parseLatLon, createRoute, remaining, formatDistance, BURJ_KHALIFA } from "../src/route.js";
+import {
+  distance,
+  bearing,
+  parseLatLon,
+  createRoute,
+  remaining,
+  formatDistance,
+  placeName,
+  shortAddress,
+  BURJ_KHALIFA,
+} from "../src/route.js";
 
 const A = { lon: 55.27, lat: 25.2 };
 const north = (m) => ({ lon: A.lon, lat: A.lat + (m / 6378137) * (180 / Math.PI) });
@@ -31,6 +41,20 @@ test("remaining distance shrinks as you follow the route", () => {
 test("formatDistance switches from meters to kilometers", () => {
   assert.equal(formatDistance(234), "230 m");
   assert.equal(formatDistance(2340), "2.3 km");
+});
+
+test("placeName builds a one-line name without repeats", () => {
+  assert.equal(
+    placeName({ name: "Dubai Mall", street: "Financial Center Street", city: "Dubai", state: "Dubai", country: "United Arab Emirates" }),
+    "Dubai Mall, Financial Center Street, Dubai, United Arab Emirates"
+  );
+  assert.equal(placeName({ housenumber: "10", street: "Downing Street", city: "London", country: "United Kingdom" }), "10 Downing Street, London, United Kingdom");
+  assert.equal(placeName({ name: "Paris", country: "France" }), "Paris, France");
+});
+
+test("shortAddress keeps the first parts of a long address", () => {
+  assert.equal(shortAddress("A, B, C, D, E"), "A, B, C");
+  assert.equal(shortAddress("A, B"), "A, B");
 });
 
 test("Burj Khalifa is in downtown Dubai", () => {

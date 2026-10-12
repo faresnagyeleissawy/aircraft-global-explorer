@@ -25,15 +25,17 @@ Go to **Settings → Pages** in the repository and choose "Deploy from a branch"
 | Shift | Boost | With ↑ / ↓: up / down | More throttle |
 | Space | Handbrake | | |
 | Mouse wheel | Zoom in and out | | |
+| Click | Show the name and address of that building or spot | | |
 | Double-click | Go to that spot on the map | | |
 
 The arrow keys and Shift are all you need. W and S also work for drone height and plane throttle. Press 1, 2 or 3 (or C to cycle) to switch between car, drone and plane. V switches between the chase and inside views, R takes you back to the start point, B flies to Burj Khalifa, and H shows or hides the controls. Zooming a long way out tilts the camera down to a map-like view.
 
 ## Search, routes and Burj Khalifa
 
-- **Search** moves you to any address or place in the world. You can also type coordinates as `lat, lon`.
+- **Search** moves you to any address or place in the world. While you type, a list of matching places appears; pick one with the mouse or the arrow keys and Enter. You can also type coordinates as `lat, lon`. In car mode you are put on the nearest road.
 - **Famous places** is a short list of cities and landmarks to jump to.
-- **Route from / to** draws the road route between two places as a yellow line and shows the distance left. Leave "from" empty to start where you are. With a typed start you are put on the road there, facing along the route. Routes longer than 300 km are refused.
+- **Route from / to** draws the road route between two places as a yellow line and shows the distance left. Leave "from" empty to start where you are. The car is always moved to the exact start of the line, facing along it; the drone and the plane are only moved when you type a start. Routes longer than 300 km are refused.
+- **Building labels**: buildings that have a name or address in OpenStreetMap show it as a label when you are within 300 m. Click any building or spot to see its name and address; if the building has none of its own, the address of that point is looked up.
 - When you fly near Dubai the display shows the direction and distance to Burj Khalifa. **Fly to Burj Khalifa** (or B) starts a flight 3 km away with the tower straight ahead, and so does starting a flight from Downtown.
 
 ## Map data
@@ -50,7 +52,8 @@ The Cesium ion Community plan is free for personal and non-commercial use. Comme
 - `src/physics.js` holds the movement models for the car, the drone and the plane. It is plain JavaScript with no Cesium code, and it is unit tested.
 - `src/facade.js` is a shader that draws windows, glass and roofs on the plain OSM Buildings blocks, so the city looks built rather than like white boxes. The pattern is generated, not photographed, so it does not match each real building.
 - `src/route.js` holds the distance, bearing and route-progress helpers. It is also plain JavaScript and unit tested.
-- Addresses are looked up with OpenStreetMap's [Nominatim](https://nominatim.org) geocoder, which is free and needs no key but allows at most one search a second. On Google's tiles the Google geocoder from Cesium ion is used instead, as Google's terms require. Routes come from the public [OSRM](https://project-osrm.org) demo server, which is free and needs no key but is best effort and meant for light use.
+- `src/suggest.js` is the list of places under the search boxes and `src/labels.js` puts the name and address labels on buildings.
+- Addresses are looked up with OpenStreetMap's [Nominatim](https://nominatim.org) geocoder, which is free and needs no key but allows at most one search a second. The list shown while you type comes from [Photon](https://photon.komoot.io), another free OpenStreetMap geocoder that allows search-as-you-type. On Google's tiles the Google geocoder from Cesium ion is used instead, as Google's terms require. Routes come from the public [OSRM](https://project-osrm.org) demo server, which is free and needs no key but is best effort and meant for light use.
 - `src/main.js` turns off Cesium's mouse navigation, runs the game loop and moves the camera every frame. It finds the height of whatever is under the player (terrain, a road or a rooftop) with `scene.sampleHeight`.
 - Walls work by sampling the height just ahead of you. If the surface ahead is more than a step higher (0.6 m on foot, 1.2 m by car), you are blocked. A plane crashes when it drops below the surface.
 
@@ -72,5 +75,5 @@ Open `http://localhost:8080/?offline` to run the game on a plain globe with no i
 - CesiumJS © Cesium GS, Inc. ([Apache 2.0](https://github.com/CesiumGS/cesium/blob/main/LICENSE.md)), loaded from jsDelivr.
 - The truck and plane models (`CesiumMilkTruck.glb`, `Cesium_Air.glb`) are CesiumJS sample models © Cesium GS, Inc. ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).
 - Map data: Google, Cesium, OpenStreetMap contributors and Microsoft Bing, credited on screen.
-- Address search: [Nominatim](https://nominatim.org), © OpenStreetMap contributors.
+- Address search: [Nominatim](https://nominatim.org) and [Photon](https://photon.komoot.io) by Komoot, © OpenStreetMap contributors.
 - Routes: [OSRM](https://project-osrm.org) demo server, using © OpenStreetMap contributors data ([ODbL](https://www.openstreetmap.org/copyright)).

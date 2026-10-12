@@ -153,6 +153,31 @@ input {
   color: #ff8a80;
 }
 
+.suggest {
+  position: fixed;
+  z-index: 5;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-width: 360px;
+  background: #0d1015;
+  border: 1px solid #39414d;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.suggest li {
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.suggest li:hover,
+.suggest li.active {
+  background: #262d38;
+}
+
 .links {
   display: flex;
   justify-content: space-between;

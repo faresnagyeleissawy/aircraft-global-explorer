@@ -55,6 +55,8 @@ Use the **Buildings** menu to choose the data:
 - **3D buildings** (the default) uses Cesium OSM Buildings on Cesium World Terrain with Bing imagery. It covers the whole world: buildings are 3D blocks with their real footprint and height, and the game draws windows on them.
 - **Photorealistic** uses Google Photorealistic 3D Tiles through Cesium ion. Where Google has a 3D mesh the city looks like a photo, but many cities, Dubai among them, only have a satellite photo on flat ground. The free plan allows 1,000 sessions a month, and each page load uses one.
 
+The **Graphics** menu has an **Ultra** setting for a strong graphics card: full screen resolution, smoothed edges, finer buildings and terrain, long soft shadows and sunlight on the terrain. Under the menu the game names the graphics card the browser is drawing with. On a laptop with two cards, browsers often use the power-saving one; Windows Settings → System → Display → Graphics lets you set the browser to "High performance".
+
 The Cesium ion Community plan is free for personal and non-commercial use. Commercial use needs a paid plan.
 
 ## How it works

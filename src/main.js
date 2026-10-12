@@ -35,6 +35,7 @@ const Cesium = window.Cesium;
 const TOKEN_KEY = "dubai3d.ionToken";
 const DATA_KEY = "dubai3d.data";
 const PLACE_KEY = "dubai3d.place";
+const QUALITY_KEY = "dubai3d.quality";
 
 // ?offline runs on a plain globe with no Cesium ion data (used for local testing).
 const params = new URLSearchParams(window.location.search);
@@ -165,7 +166,21 @@ async function startGame() {
     viewerOptions.baseLayer = false;
   }
 
+  // "ultra" is for a strong graphics card: see applyUltra below.
+  const ultra = storageGet(QUALITY_KEY) === "ultra";
+  $("quality-select").value = ultra ? "ultra" : "standard";
+  $("quality-select").addEventListener("change", (e) => {
+    storageSet(QUALITY_KEY, e.target.value === "ultra" ? "ultra" : null);
+    window.location.reload();
+  });
+  if (ultra) {
+    viewerOptions.msaaSamples = 8;
+    // More map tiles and buildings in flight at once, so the picture fills in faster.
+    Cesium.RequestScheduler.maximumRequestsPerServer = 18;
+  }
+
   const viewer = new Cesium.Viewer("cesiumContainer", viewerOptions);
+  $("gpu-note").textContent = graphicsCard(viewer.scene);
   const scene = viewer.scene;
   const camera = viewer.camera;
   window.viewer = viewer; // handy in the browser console
@@ -178,6 +193,7 @@ async function startGame() {
   if (dataMode === "google") {
     const tileset = await Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true });
     scene.primitives.add(tileset);
+    if (ultra) applyUltra(viewer, tileset);
     scene.globe.show = false;
   } else if (dataMode === "osm") {
     const buildings = await Cesium.createOsmBuildingsAsync();
@@ -205,8 +221,10 @@ async function startGame() {
     viewer.terrainShadows = Cesium.ShadowMode.RECEIVE_ONLY;
     viewer.shadowMap.maximumDistance = 1500;
     viewer.shadowMap.darkness = 0.45;
+    if (ultra) applyUltra(viewer, buildings);
   } else {
     scene.globe.baseColor = Cesium.Color.fromCssColorString("#c9b98f");
+    if (ultra) applyUltra(viewer, null);
   }
 
   if (!scene.sampleHeightSupported) {
@@ -215,6 +233,55 @@ async function startGame() {
 
   const game = createGame(viewer, dataMode, { facade, terrain: terrainReady ? await terrainReady : null });
   game.start();
+}
+
+// ---------------------------------------------------------------- graphics
+
+// Name of the graphics card the browser is drawing with, so the player can
+// see whether a laptop is using its fast card or its power-saving one.
+function graphicsCard(scene) {
+  try {
+    const gl = scene.context._gl;
+    const info = gl.getExtension("WEBGL_debug_renderer_info");
+    const name = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    // "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 ... Direct3D11 ...)" -> the card's own name.
+    const inner = /^ANGLE \([^,]+, (.+?)(?: \(0x| Direct3D| OpenGL| Vulkan|,|$)/.exec(name);
+    return "Drawn by: " + (inner ? inner[1].trim() : name);
+  } catch {
+    return "";
+  }
+}
+
+// The best picture Cesium can give, for a strong graphics card: full screen
+// resolution, smooth edges, finer buildings and terrain, long soft shadows
+// and sunlight on the terrain. (Cesium can also shade corners, but that
+// draws stripes across the ground from low down, so it is left off.) tileset is the 3D
+// buildings or the photorealistic mesh, or null when there are none.
+function applyUltra(viewer, tileset) {
+  const scene = viewer.scene;
+  viewer.useBrowserRecommendedResolution = false; // every pixel of a high-density screen
+  viewer.resolutionScale = 1;
+  scene.highDynamicRange = true;
+  scene.postProcessStages.fxaa.enabled = true;
+
+  // Lower numbers switch to detailed tiles sooner (defaults: 2 and 16).
+  scene.globe.maximumScreenSpaceError = 1.2;
+  scene.globe.tileCacheSize = 1500;
+  if (tileset) {
+    tileset.maximumScreenSpaceError = 6;
+    tileset.cacheBytes = 2 * 1024 * 1024 * 1024;
+    tileset.maximumCacheOverflowBytes = 1024 * 1024 * 1024;
+    tileset.dynamicScreenSpaceError = false;
+  }
+
+  if (viewer.shadows) {
+    viewer.shadowMap.size = 4096;
+    viewer.shadowMap.softShadows = true;
+    viewer.shadowMap.maximumDistance = 5000;
+  }
+  scene.globe.enableLighting = true;
+  scene.globe.dynamicAtmosphereLighting = true;
+  scene.fog.density = 0.00012;
 }
 
 // ---------------------------------------------------------------- buildings

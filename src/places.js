@@ -1,11 +1,25 @@
-// Start points in Dubai. Coordinates are approximate; heading is in degrees
+// Famous places to jump to. Coordinates are approximate; heading is in degrees
 // (0 = north). You arrive in the air and drop to the ground in walk or car mode.
 export const PLACES = [
-  { id: "downtown", name: "Downtown: Burj Khalifa", lat: 25.1915, lon: 55.2705, heading: 50 },
-  { id: "museum", name: "Sheikh Zayed Road: Museum of the Future", lat: 25.2165, lon: 55.2775, heading: 40 },
-  { id: "marina", name: "Dubai Marina", lat: 25.08, lon: 55.14, heading: 225 },
-  { id: "palm", name: "Palm Jumeirah: Atlantis", lat: 25.122, lon: 55.125, heading: 330 },
-  { id: "burj-al-arab", name: "Burj Al Arab", lat: 25.135, lon: 55.19, heading: 330 },
-  { id: "frame", name: "Dubai Frame", lat: 25.2305, lon: 55.2975, heading: 10 },
-  { id: "creek", name: "Dubai Creek: Al Fahidi", lat: 25.259, lon: 55.297, heading: 0 },
+  { id: "downtown", name: "Dubai: Burj Khalifa", lat: 25.1915, lon: 55.2705, heading: 50 },
+  { id: "museum", name: "Dubai: Museum of the Future", lat: 25.2165, lon: 55.2775, heading: 40 },
+  { id: "marina", name: "Dubai: Marina", lat: 25.08, lon: 55.14, heading: 225 },
+  { id: "palm", name: "Dubai: Palm Jumeirah, Atlantis", lat: 25.122, lon: 55.125, heading: 330 },
+  { id: "burj-al-arab", name: "Dubai: Burj Al Arab", lat: 25.135, lon: 55.19, heading: 330 },
+  { id: "frame", name: "Dubai: Dubai Frame", lat: 25.2305, lon: 55.2975, heading: 10 },
+  { id: "creek", name: "Dubai: Creek, Al Fahidi", lat: 25.259, lon: 55.297, heading: 0 },
+  { id: "abu-dhabi", name: "Abu Dhabi: Corniche", lat: 24.47, lon: 54.335, heading: 60 },
+  { id: "riyadh", name: "Riyadh: Kingdom Centre", lat: 24.705, lon: 46.672, heading: 20 },
+  { id: "cairo", name: "Cairo: Tahrir Square", lat: 30.0425, lon: 31.233, heading: 30 },
+  { id: "giza", name: "Giza: Pyramids", lat: 29.971, lon: 31.138, heading: 300 },
+  { id: "istanbul", name: "Istanbul: Hagia Sophia", lat: 41.005, lon: 28.975, heading: 30 },
+  { id: "paris", name: "Paris: Eiffel Tower", lat: 48.853, lon: 2.3, heading: 320 },
+  { id: "london", name: "London: Westminster", lat: 51.4985, lon: -0.122, heading: 330 },
+  { id: "rome", name: "Rome: Colosseum", lat: 41.888, lon: 12.494, heading: 300 },
+  { id: "new-york", name: "New York: Midtown Manhattan", lat: 40.745, lon: -73.99, heading: 30 },
+  { id: "san-francisco", name: "San Francisco: Downtown", lat: 37.785, lon: -122.405, heading: 30 },
+  { id: "rio", name: "Rio de Janeiro: Copacabana", lat: -22.975, lon: -43.185, heading: 30 },
+  { id: "tokyo", name: "Tokyo: Shinjuku", lat: 35.686, lon: 139.697, heading: 20 },
+  { id: "singapore", name: "Singapore: Marina Bay", lat: 1.28, lon: 103.855, heading: 0 },
+  { id: "sydney", name: "Sydney: Opera House", lat: -33.862, lon: 151.21, heading: 30 },
 ];

@@ -92,7 +92,8 @@ input {
 }
 
 #nav,
-#nav form {
+#nav form,
+#search-form {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -102,17 +103,20 @@ input {
   gap: 10px;
 }
 
+#search-form .row,
 #nav .row {
   display: flex;
   gap: 6px;
 }
 
+#search-form .row input,
 #nav .row input {
   flex: 1;
   min-width: 0;
 }
 
 #nav button,
+#search-form button,
 #plane-tools button {
   padding: 6px 10px;
   border-radius: 6px;

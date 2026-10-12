@@ -1,7 +1,8 @@
 // Procedural building fronts for the untextured OSM Buildings blocks: rows of
 // windows on the walls, glass curtain walls higher up, plain roofs. The pattern
 // is drawn by a shader from each fragment's position in a flat east/north/up
-// frame fixed to the city, so it stays put on the walls as the camera moves.
+// frame fixed to the ground near the player, so it stays put on the walls as
+// the camera moves.
 
 const FRAGMENT_SHADER = `
 const float AMBIENT = 0.55;
@@ -60,16 +61,24 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
 }
 `;
 
-// Returns the shader for a tileset plus an update() to call before each
-// render. lon/lat are degrees; groundHeight is the city's ground level in
-// meters above the ellipsoid, where the first storey starts.
+// Returns the shader for a tileset, an update() to call before each render,
+// and setAnchor() to move the frame when the player travels: a flat frame is
+// only good for a few tens of kilometers. lon/lat are degrees; groundHeight is
+// the local ground level in meters above the ellipsoid, where the first
+// storey starts.
 export function createFacade(Cesium, camera, lon, lat, groundHeight) {
-  const anchor = Cesium.Cartesian3.fromDegrees(lon, lat, groundHeight);
-  const frame = Cesium.Transforms.eastNorthUpToFixedFrame(anchor);
-  const axes = [0, 1, 2].map((i) => {
-    const c = Cesium.Matrix4.getColumn(frame, i, new Cesium.Cartesian4());
-    return new Cesium.Cartesian3(c.x, c.y, c.z);
-  });
+  const anchor = new Cesium.Cartesian3();
+  const frame = new Cesium.Matrix4();
+  const column = new Cesium.Cartesian4();
+  const axes = [new Cesium.Cartesian3(), new Cesium.Cartesian3(), new Cesium.Cartesian3()];
+
+  function setAnchor(newLon, newLat, newGroundHeight) {
+    Cesium.Cartesian3.fromDegrees(newLon, newLat, newGroundHeight, undefined, anchor);
+    Cesium.Transforms.eastNorthUpToFixedFrame(anchor, undefined, frame);
+    axes.forEach((axis, i) => Cesium.Cartesian3.fromCartesian4(Cesium.Matrix4.getColumn(frame, i, column), axis));
+  }
+  setAnchor(lon, lat, groundHeight);
+
   const vec3 = Cesium.UniformType.VEC3;
   const uniform = () => ({ type: vec3, value: new Cesium.Cartesian3() });
   const shader = new Cesium.CustomShader({
@@ -88,5 +97,5 @@ export function createFacade(Cesium, camera, lon, lat, groundHeight) {
     shader.setUniform("u_upEC", Cesium.Matrix4.multiplyByPointAsVector(view, axes[2], scratch));
   }
   update();
-  return { shader, update };
+  return { shader, update, setAnchor };
 }

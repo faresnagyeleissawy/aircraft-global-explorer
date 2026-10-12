@@ -19,13 +19,15 @@ const MODE_LABELS = { walk: "Walk", car: "Car", plane: "Plane" };
 const PLANE_SPAWN_HEIGHT = 350;
 const RESPAWN_DELAY = 2.5;
 const ARRIVE_DISTANCE = 25;
+const MAX_ROUTE_LENGTH = 300000; // longer lines are too heavy to drape on the ground
+const REANCHOR_DISTANCE = 15000;
+const MAX_DROP = 400;
 // Public OSRM demo server: free, no key, best effort.
 const ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
 // OpenStreetMap's Nominatim geocoder: free, no key, at most one search a second.
 const GEOCODE_URL = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=en";
 // Street level in Dubai, in meters above the ellipsoid (sea level is about -32 m there).
 const DUBAI_GROUND = -28;
-const DUBAI_BOX = "54.85,25.40,55.65,24.75"; // west, north, east, south
 
 const $ = (id) => document.getElementById(id);
 
@@ -90,8 +92,8 @@ async function boot() {
 }
 
 async function startGame() {
-  // OSM Buildings is the default: Google's photorealistic tiles have no 3D mesh
-  // for Dubai, only satellite photos on flat ground.
+  // OSM Buildings is the default because it has buildings everywhere. Google's
+  // photorealistic tiles only have a 3D mesh in some cities (not Dubai, for one).
   const dataMode = OFFLINE ? "none" : storageGet(DATA_KEY) || "osm";
   $("data-select").value = dataMode === "none" ? "osm" : dataMode;
 
@@ -107,8 +109,11 @@ async function startGame() {
     infoBox: false,
     selectionIndicator: false,
   };
+  // World terrain is drawn only under the OSM buildings, but it is also asked
+  // for the ground height of a place before the player is sent there.
+  const terrainReady = OFFLINE ? null : Cesium.createWorldTerrainAsync();
   if (dataMode === "osm") {
-    viewerOptions.terrain = Cesium.Terrain.fromWorldTerrain();
+    viewerOptions.terrain = new Cesium.Terrain(terrainReady);
   } else {
     viewerOptions.baseLayer = false;
   }
@@ -120,9 +125,8 @@ async function startGame() {
 
   scene.screenSpaceCameraController.enableInputs = false;
   camera.frustum.near = 0.2;
-  // Midday in Dubai so buildings are lit from above.
-  viewer.clock.currentTime = Cesium.JulianDate.fromIso8601("2026-03-20T08:00:00Z");
   viewer.clock.shouldAnimate = false;
+  let facade = null;
 
   if (dataMode === "google") {
     const tileset = await Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true });
@@ -133,7 +137,7 @@ async function startGame() {
     // OSM Buildings are untextured blocks. Draw windows and glass on them
     // (facade.js), tint each building a little differently, and cast sun
     // shadows so they read as a city.
-    const facade = createFacade(Cesium, camera, 55.27, 25.2, DUBAI_GROUND);
+    facade = createFacade(Cesium, camera, 55.27, 25.2, DUBAI_GROUND);
     buildings.customShader = facade.shader;
     scene.preRender.addEventListener(facade.update);
     buildings.style = new Cesium.Cesium3DTileStyle({
@@ -161,13 +165,15 @@ async function startGame() {
     console.warn("sampleHeight is not supported by this browser; ground following will be approximate.");
   }
 
-  const game = createGame(viewer, dataMode);
+  const game = createGame(viewer, dataMode, { facade, terrain: terrainReady ? await terrainReady : null });
   game.start();
 }
 
 // ---------------------------------------------------------------- game
 
-function createGame(viewer, dataMode) {
+// world.facade is the building shader (OSM mode only) and world.terrain a
+// terrain provider for height lookups; either can be null.
+function createGame(viewer, dataMode, world) {
   const scene = viewer.scene;
   const camera = viewer.camera;
   const HPR = Cesium.HeadingPitchRoll;
@@ -186,6 +192,9 @@ function createGame(viewer, dataMode) {
   let routeEntities = [];
   let flashText = "";
   let flashUntil = 0;
+  let reanchoring = false;
+  let placed = false; // false until the first start point has been reached
+  let anchor = { lon: 0, lat: 0, ground: 0 }; // where the sun and the building shader were last set up
 
   const input = createInput(onAction);
 
@@ -226,6 +235,10 @@ function createGame(viewer, dataMode) {
     let h;
     if (scene.sampleHeightSupported) h = scene.sampleHeight(scratchCarto, exclude);
     if (h === undefined && scene.globe.show) h = scene.globe.getHeight(scratchCarto);
+    // While an area is still loading, its coarse stand-in surface can be
+    // kilometers below the real one; nothing real is that far under the
+    // local ground level.
+    if (h !== undefined && h < anchor.ground - MAX_DROP) h = undefined;
     return h;
   }
 
@@ -250,10 +263,10 @@ function createGame(viewer, dataMode) {
       ? new Cesium.IonGeocoderService({ scene, geocodeProviderType: Cesium.IonGeocodeProviderType.GOOGLE })
       : null;
 
-  async function nominatim(text, area) {
+  async function nominatim(text) {
     let rows;
     try {
-      const res = await fetch(GEOCODE_URL + area + "&q=" + encodeURIComponent(text.trim()));
+      const res = await fetch(GEOCODE_URL + "&q=" + encodeURIComponent(text.trim()));
       rows = await res.json();
     } catch {
       throw new Error("The address search did not answer. Try again in a moment.");
@@ -268,19 +281,19 @@ function createGame(viewer, dataMode) {
     if (known) return { lon: known.lon, lat: known.lat, name: known.name };
     const missing = new Error('No place found for "' + text.trim() + '".');
     if (googleGeocoder) {
-      const query = /dubai|uae|emirates/i.test(text) ? text : text + ", Dubai";
-      const results = await googleGeocoder.geocode(query);
+      const results = await googleGeocoder.geocode(text.trim());
       if (!results.length) throw missing;
       const dest = results[0].destination;
       const carto =
         dest instanceof Cesium.Rectangle ? Cesium.Rectangle.center(dest) : Cesium.Cartographic.fromCartesian(dest);
       return { lon: toDeg(carto.longitude), lat: toDeg(carto.latitude), name: results[0].displayName };
     }
-    // Look inside Dubai first, then anywhere in the UAE.
-    const row =
-      (await nominatim(text, "&bounded=1&viewbox=" + DUBAI_BOX)) || (await nominatim(text, "&countrycodes=ae"));
+    // Anywhere in the world: the best-known match wins, as on a map site.
+    const row = await nominatim(text);
     if (!row) throw missing;
-    return { lon: Number(row.lon), lat: Number(row.lat), name: row.display_name.split(",").slice(0, 2).join(",") };
+    const parts = row.display_name.split(", ");
+    const name = parts.length > 3 ? [parts[0], parts[1], parts[parts.length - 1]].join(", ") : row.display_name;
+    return { lon: Number(row.lon), lat: Number(row.lat), name };
   }
 
   async function fetchRoute(from, to) {
@@ -294,6 +307,9 @@ function createGame(viewer, dataMode) {
     }
     if (data.code !== "Ok" || !data.routes || !data.routes.length) {
       throw new Error("No road route found between those points.");
+    }
+    if (data.routes[0].distance > MAX_ROUTE_LENGTH) {
+      throw new Error("That route is " + formatDistance(data.routes[0].distance) + " long. Pick places less than 300 km apart.");
     }
     const points = data.routes[0].geometry.coordinates.map(([lon, lat]) => ({ lon, lat }));
     if (points.length < 2) throw new Error("Those two points are the same place.");
@@ -371,7 +387,7 @@ function createGame(viewer, dataMode) {
     if (!text.trim()) return;
     runNav(async () => {
       const found = await findAddress(text);
-      placeAt(found.lon, found.lat, state.heading);
+      await travelTo(found.lon, found.lat, state.heading);
       return "Moved to " + found.name;
     });
   });
@@ -387,7 +403,7 @@ function createGame(viewer, dataMode) {
       const points = await fetchRoute(from, to);
       showRoute(points);
       // With a typed start you are put on the road there, facing along the route.
-      if (fromText.trim()) placeAt(points[0].lon, points[0].lat, bearing(points[0], points[1]));
+      if (fromText.trim()) await travelTo(points[0].lon, points[0].lat, bearing(points[0], points[1]));
       return "Follow the yellow line: " + formatDistance(route.length) + " to " + to.name;
     });
   });
@@ -478,12 +494,45 @@ function createGame(viewer, dataMode) {
   function spawn() {
     // Flying from Downtown starts with the tower in front of you.
     if (mode === "plane" && place.id === "downtown") flyToBurjKhalifa();
-    else placeAt(place.lon, place.lat, toRad(place.heading));
+    else travelTo(place.lon, place.lat, toRad(place.heading));
   }
 
-  // Puts the player above a point (degrees). On foot or wheels they then drop to the ground.
-  function placeAt(lon, lat, heading, height = PLANE_SPAWN_HEIGHT) {
-    state = createState(toRad(lon), toRad(lat), height, heading);
+  // Ground height (meters above the ellipsoid) at a point in degrees, or 0 when it cannot be looked up.
+  async function terrainHeight(lon, lat) {
+    if (!world.terrain) return 0;
+    try {
+      const [point] = await Cesium.sampleTerrainMostDetailed(world.terrain, [Cesium.Cartographic.fromDegrees(lon, lat)]);
+      return point.height || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  // Sends the player to a point anywhere in the world (degrees).
+  async function travelTo(lon, lat, heading) {
+    placeAt(lon, lat, heading, await terrainHeight(lon, lat));
+  }
+
+  // Midday sun wherever the player is, so buildings are lit from above.
+  function setSun(lon) {
+    const hours = (((12 - lon / 15) % 24) + 24) % 24;
+    const midnight = Cesium.JulianDate.fromIso8601("2026-03-20T00:00:00Z");
+    viewer.clock.currentTime = Cesium.JulianDate.addSeconds(midnight, hours * 3600, midnight);
+  }
+
+  // Ties the sun and the building shader to the ground at a point in degrees.
+  function setAnchor(lon, lat, ground) {
+    anchor = { lon, lat, ground };
+    setSun(lon);
+    if (world.facade) world.facade.setAnchor(lon, lat, ground);
+  }
+
+  // Puts the player `lift` meters above ground level at a point (degrees). On
+  // foot or wheels they then drop to the ground.
+  function placeAt(lon, lat, heading, ground, lift = PLANE_SPAWN_HEIGHT) {
+    state = createState(toRad(lon), toRad(lat), ground + lift, heading);
+    setAnchor(lon, lat, ground);
+    placed = true;
     camHeading = heading;
     crashTimer = 0;
     lastGround = undefined;
@@ -501,7 +550,7 @@ function createGame(viewer, dataMode) {
   function flyToBurjKhalifa() {
     if (mode !== "plane") setMode("plane");
     const start = offset(toRad(BURJ_KHALIFA.lon), toRad(BURJ_KHALIFA.lat), 3000, toRad(225));
-    placeAt(toDeg(start.lon), toDeg(start.lat), toRad(52), 500);
+    placeAt(toDeg(start.lon), toDeg(start.lat), toRad(52), DUBAI_GROUND, 530);
     flash("Burj Khalifa ahead", 4);
   }
 
@@ -544,7 +593,6 @@ function createGame(viewer, dataMode) {
     car.show = mode === "car" && view === "chase";
     plane.show = mode === "plane" && view === "chase";
     $("hud-mode").textContent = MODE_LABELS[mode];
-    $("nav").hidden = mode === "plane";
     $("plane-tools").hidden = mode !== "plane";
   }
 
@@ -554,6 +602,17 @@ function createGame(viewer, dataMode) {
     const now = performance.now();
     const dt = Math.min(0.1, (now - lastTime) / 1000);
     lastTime = now;
+    if (!placed) return;
+
+    // After a long trip, move the sun and the building shader along too.
+    if (!reanchoring && distance(here(), anchor) > REANCHOR_DISTANCE) {
+      const { lon, lat } = here();
+      reanchoring = true;
+      terrainHeight(lon, lat).then((ground) => {
+        setAnchor(lon, lat, ground);
+        reanchoring = false;
+      });
+    }
 
     if (pendingDrop) {
       const g = sampleGround(state.lon, state.lat);
@@ -596,7 +655,7 @@ function createGame(viewer, dataMode) {
   function hoverCamera() {
     camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
     camera.setView({
-      destination: Cesium.Cartesian3.fromRadians(state.lon, state.lat, PLANE_SPAWN_HEIGHT),
+      destination: Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height),
       orientation: { heading: state.heading, pitch: Cesium.Math.toRadians(-89), roll: 0 },
     });
   }
@@ -649,12 +708,11 @@ function createGame(viewer, dataMode) {
   }
 
   function updateTarget() {
-    if (mode === "plane") {
-      $("hud-target").textContent = pointer(BURJ_KHALIFA.name, BURJ_KHALIFA, distance(here(), BURJ_KHALIFA));
-      return;
-    }
     if (!route) {
-      $("hud-target").textContent = "";
+      // In the air over Dubai, point to the tower instead.
+      const toTower = distance(here(), BURJ_KHALIFA);
+      const show = mode === "plane" && toTower < 50000;
+      $("hud-target").textContent = show ? pointer(BURJ_KHALIFA.name, BURJ_KHALIFA, toTower) : "";
       return;
     }
     const left = remaining(route, here());

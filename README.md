@@ -1,6 +1,6 @@
-# Dubai 3D Explorer
+# World 3D Explorer
 
-A browser game for exploring real Dubai in 3D. You can walk, drive or fly, steering with the arrow keys. It is built on [CesiumJS](https://cesium.com/platform/cesiumjs/) (open source, Apache 2.0) and uses map data from a free [Cesium ion](https://ion.cesium.com) account.
+A browser game for exploring the real world in 3D. Search for any place, then walk, drive or fly there, steering with the arrow keys. It started as a Dubai explorer, which is why the repository is called `dubai-3d-explorer` and Dubai is where you start. It is built on [CesiumJS](https://cesium.com/platform/cesiumjs/) (open source, Apache 2.0) and uses map data from a free [Cesium ion](https://ion.cesium.com) account.
 
 ## Run it
 
@@ -31,16 +31,17 @@ Press 1, 2 or 3 (or C to cycle) to switch mode. V switches between the chase and
 
 ## Search, routes and Burj Khalifa
 
-- **Search address** (walk and car modes) moves you to an address or place in Dubai. You can also type coordinates as `lat, lon`.
-- **Route from / to** (walk and car modes) draws the road route between two places as a yellow line and shows the distance left. Leave "from" empty to start where you are. With a typed start you are put on the road there, facing along the route.
-- In plane mode the display always shows the direction and distance to Burj Khalifa. **Fly to Burj Khalifa** (or B) starts a flight 3 km away with the tower straight ahead, and so does starting a flight from Downtown.
+- **Search** moves you to any address or place in the world. You can also type coordinates as `lat, lon`.
+- **Famous places** is a short list of cities and landmarks to jump to.
+- **Route from / to** draws the road route between two places as a yellow line and shows the distance left. Leave "from" empty to start where you are. With a typed start you are put on the road there, facing along the route. Routes longer than 300 km are refused.
+- When you fly near Dubai the display shows the direction and distance to Burj Khalifa. **Fly to Burj Khalifa** (or B) starts a flight 3 km away with the tower straight ahead, and so does starting a flight from Downtown.
 
 ## Map data
 
 Use the **Buildings** menu to choose the data:
 
-- **3D buildings** (the default) uses Cesium OSM Buildings on Cesium World Terrain with Bing imagery. Every building in Dubai is a 3D block with its real height.
-- **Satellite photo** uses Google Photorealistic 3D Tiles through Cesium ion. Google has no 3D mesh for Dubai, so the city is a photo on flat ground with no buildings to drive between. The free plan allows 1,000 sessions a month, and each page load uses one.
+- **3D buildings** (the default) uses Cesium OSM Buildings on Cesium World Terrain with Bing imagery. It covers the whole world: buildings are 3D blocks with their real footprint and height, and the game draws windows on them.
+- **Photorealistic** uses Google Photorealistic 3D Tiles through Cesium ion. Where Google has a 3D mesh the city looks like a photo, but many cities, Dubai among them, only have a satellite photo on flat ground. The free plan allows 1,000 sessions a month, and each page load uses one.
 
 The Cesium ion Community plan is free for personal and non-commercial use. Commercial use needs a paid plan.
 
@@ -56,7 +57,7 @@ The Cesium ion Community plan is free for personal and non-commercial use. Comme
 ## Known limits
 
 - Driving under a bridge is treated as hitting a wall, because heights are sampled from above.
-- The start points are approximate. In walk or car mode you may land on a rooftop. You can walk off it, or press 3 to fly.
+- The famous places are approximate. In walk or car mode you may land on a rooftop. You can walk off it, or press 3 to fly.
 
 ## Development
 

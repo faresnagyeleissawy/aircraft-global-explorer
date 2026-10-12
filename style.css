@@ -43,6 +43,7 @@ body {
   gap: 10px;
 }
 
+.dialog label.check,
 #panel label.check {
   flex-direction: row;
   align-items: center;

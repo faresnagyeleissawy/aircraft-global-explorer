@@ -42,6 +42,10 @@
             <button type="button" id="route-clear">Clear</button>
           </div>
         </form>
+        <label class="check" title="Between two airports: roll down the runway, take off, and land on the runway at the other end">
+          <input type="checkbox" id="trip-runways" />
+          <span>Advanced: take off and land on the runways</span>
+        </label>
         <button type="button" id="pick-trip">Pick a trip on the map</button>
         <div id="nav-status" aria-live="polite"></div>
       </div>
@@ -140,6 +144,10 @@
           <input id="start-from" type="search" autocomplete="off" placeholder="From, e.g. DXB" aria-label="Trip from" />
           <input id="start-to" type="search" autocomplete="off" placeholder="To, e.g. LHR" aria-label="Trip to" />
         </div>
+        <label class="check">
+          <input type="checkbox" id="start-runways" />
+          <span>Advanced: take off and land on the runways</span>
+        </label>
         <p>Or fly freely from a start point of your choice:</p>
         <label>
           Search for a place

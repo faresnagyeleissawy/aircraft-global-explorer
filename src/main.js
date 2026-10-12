@@ -7,10 +7,12 @@ import { labelBuildings } from "./labels.js";
 import { attachSuggest } from "./suggest.js";
 import {
   CRUISE_SPEED,
+  MIN_RUNWAY_TRIP,
   createTrip,
   findAirport,
   formatDuration,
   nearestFlown,
+  runwayLine,
   suggestAirports,
   tripState,
 } from "./trip.js";
@@ -47,6 +49,10 @@ const MAX_ZOOM = 40;
 const RESPAWN_DELAY = 2.5;
 const ARRIVE_DISTANCE = 300;
 const AIRPORTS_URL = "data/airports.json";
+const RUNWAYS_URL = "data/runways.json";
+const RUNWAYS_KEY = "dubai3d.runways";
+const LOW = 1500; // meters above the ground: below this the autopilot flies in real time
+const HANDS_OFF = 150; // meters above the ground: below this the autopilot keeps the controls
 const VIEWS = ["chase", "inside", "left", "right"]; // behind the plane, pilot's seat, window seats
 const MAP_HEIGHT = 2500000; // camera height, in meters, when a trip is picked on the map
 const MAX_ROUTE_LENGTH = 300000; // longer lines are too heavy to drape on the ground
@@ -240,9 +246,12 @@ function createGame(viewer, dataMode, world) {
 
   let view = "chase"; // one of VIEWS
   let airports = []; // rows of data/airports.json, once loaded
+  let runways = {}; // data/runways.json, once loaded: airport code -> the two ends of its longest runway
+  let parked = false; // standing on the runway after landing, until an arrow key is pressed
   let trip = null; // the flight being flown from one place to another, see trip.js
   let autopilot = false; // true while the trip flies itself
-  let timeScale = 1; // how much faster than real time the autopilot flies
+  let timeScale = 1; // how much faster than real time the autopilot is asked to fly
+  let flownScale = 1; // and how fast it is flying right now (real time near the ground)
   let place = PLACES.find((p) => p.id === storageGet(PLACE_KEY)) || PLACES[0];
   let state = createState(0, 0, 0, 0);
   let zoom = 1; // mouse wheel: multiplies the chase camera distance
@@ -338,6 +347,21 @@ function createGame(viewer, dataMode, world) {
     .then((res) => res.json())
     .then((rows) => (airports = rows))
     .catch(() => console.warn("Airport codes could not be loaded; places can still be searched by name."));
+  fetch(RUNWAYS_URL)
+    .then((res) => res.json())
+    .then((byCode) => (runways = byCode))
+    .catch(() => console.warn("Runways could not be loaded; trips will start and end in the air."));
+
+  // The advanced option, on the start screen and in the panel: one setting, two boxes.
+  const runwayBoxes = [$("start-runways"), $("trip-runways")];
+  for (const box of runwayBoxes) {
+    box.checked = storageGet(RUNWAYS_KEY) === "1";
+    box.addEventListener("change", () => {
+      for (const other of runwayBoxes) other.checked = box.checked;
+      storageSet(RUNWAYS_KEY, box.checked ? "1" : null);
+      box.blur();
+    });
+  }
 
   async function findAddress(text) {
     const coords = parseLatLon(text);
@@ -488,6 +512,12 @@ function createGame(viewer, dataMode, world) {
     route = null;
     trip = null;
     autopilot = false;
+    if (parked) {
+      // Ending the trip while standing on the runway: back into the air.
+      parked = false;
+      state.height += 150;
+      state.speed = 70;
+    }
     updateTripBar();
     refreshExclude();
   }
@@ -501,28 +531,46 @@ function createGame(viewer, dataMode, world) {
   async function startTrip(from, to) {
     const length = distance(from, to);
     if (length < 2000) throw new Error("Those two places are too close together for a flight.");
-    const line = greatCircle(from, to, Math.max(2, Math.min(400, Math.ceil(length / 5000))));
-    const [startGround, endGround] = await Promise.all([terrainHeight(from.lon, from.lat), terrainHeight(to.lon, to.lat)]);
+    // With the advanced option, and a runway known at both ends, the trip
+    // takes off and lands; otherwise it starts and ends in the air.
+    const wanted = $("trip-runways").checked;
+    const onRunways = wanted && runways[from.code] && runways[to.code] && length > MIN_RUNWAY_TRIP;
+    const runway = onRunways ? runwayLine(runways[from.code], runways[to.code]) : null;
+    const line = runway ? runway.points : greatCircle(from, to, Math.max(2, Math.min(400, Math.ceil(length / 5000))));
+    const first = line[0];
+    const last = runway ? line[line.length - 2] : line[line.length - 1];
+    const [startGround, endGround] = await Promise.all([terrainHeight(first.lon, first.lat), terrainHeight(last.lon, last.lat)]);
     showRoute(line);
-    trip = createTrip(line, startGround, endGround, from, to);
+    trip = createTrip(line, startGround, endGround, from, to, runway);
     const start = tripState(trip, 0);
     placeAt(start.lon, start.lat, start.heading, startGround, start.height - startGround);
+    state.speed = start.speed;
     autopilot = true;
+    parked = false;
     updateTripBar();
-    return "Trip " + shortName(from) + " → " + shortName(to) + ": " + formatDistance(length);
+    const how = runway ? " (runway to runway)" : wanted ? " (no runway known at both ends, so it starts in the air)" : "";
+    return "Trip " + shortName(from) + " → " + shortName(to) + ": " + formatDistance(length) + how;
   }
 
   // Moves the plane along the trip. Returns false when the trip has just ended.
   function flyTrip(dt) {
-    trip.flown = Math.min(trip.length, trip.flown + CRUISE_SPEED * timeScale * dt);
+    const before = tripState(trip, trip.flown);
+    // Take-off and landing are worth watching at their real pace.
+    const scale = trip.runways && before.clearance < LOW ? 1 : timeScale;
+    flownScale = scale;
+    trip.flown = Math.min(trip.length, trip.flown + before.speed * scale * dt);
     const at = tripState(trip, trip.flown);
     state.lon = toRad(at.lon);
     state.lat = toRad(at.lat);
-    state.heading = at.heading;
     state.height = at.height;
     state.pitch = at.pitch;
-    state.roll = 0;
-    state.speed = CRUISE_SPEED;
+    state.speed = at.speed;
+    // The line has corners where it leaves and joins the runways: bank round
+    // them in the air, but stay straight on the ground.
+    const swing = Math.atan2(Math.sin(at.heading - state.heading), Math.cos(at.heading - state.heading));
+    const eased = at.clearance > 0 ? swing * Math.min(1, dt * scale * 0.6) : swing;
+    state.heading += eased;
+    state.roll = at.clearance > 0 ? Math.max(-0.5, Math.min(0.5, (swing - eased) * 1.5)) : 0;
     return trip.flown < trip.length;
   }
 
@@ -533,6 +581,7 @@ function createGame(viewer, dataMode, world) {
       // Rejoin the line at the point nearest to where the plane is now.
       trip.flown = nearestFlown(trip, here());
       trip.arrived = false;
+      parked = false;
       state.crashed = false;
       crashTimer = 0;
     } else {
@@ -554,7 +603,9 @@ function createGame(viewer, dataMode, world) {
     $("trip-progress").value = done;
     $("trip-text").textContent =
       trip.arrived
-        ? "Arrived"
+        ? trip.runways
+          ? "Landed"
+          : "Arrived"
         : Math.round(done * 100) + "% · " + formatDistance(left) + " left · " + formatDuration(left / CRUISE_SPEED) + " of flying";
     $("trip-autopilot").textContent = autopilot ? "Autopilot: on" : "Autopilot: off";
     $("trip-autopilot").classList.toggle("active", autopilot);
@@ -1020,6 +1071,7 @@ function createGame(viewer, dataMode, world) {
   async function travelTo(lon, lat, heading) {
     const ground = await terrainHeight(lon, lat);
     autopilot = false; // going somewhere else leaves the trip's line
+    parked = false;
     placeAt(lon, lat, heading, ground);
     updateTripBar();
   }
@@ -1054,6 +1106,7 @@ function createGame(viewer, dataMode, world) {
   // of the tower so it stays in view as you pass it.
   function flyToBurjKhalifa() {
     autopilot = false;
+    parked = false;
     const start = offset(toRad(BURJ_KHALIFA.lon), toRad(BURJ_KHALIFA.lat), 3000, toRad(225));
     placeAt(toDeg(start.lon), toDeg(start.lat), toRad(52), DUBAI_GROUND, 530);
     flash("Burj Khalifa ahead", 4);
@@ -1091,15 +1144,33 @@ function createGame(viewer, dataMode, world) {
         showMessage("");
       }
     } else if (trip && autopilot) {
-      if (input.up || input.down || input.left || input.right) {
+      const low = trip.runways && tripState(trip, trip.flown).clearance < HANDS_OFF;
+      if ((input.up || input.down || input.left || input.right) && low) {
+        flash("The autopilot keeps the controls this close to the ground.", 3);
+        flyTrip(dt);
+      } else if (input.up || input.down || input.left || input.right) {
         setAutopilot(false);
       } else if (!flyTrip(dt)) {
         autopilot = false;
         trip.arrived = true;
         state.pitch = 0;
-        state.speed = 150;
-        state.throttle = 0.7;
-        flash("You have arrived at " + shortName(trip.to) + ". You have the controls.", 6);
+        if (trip.runways) {
+          parked = true;
+          state.speed = 0;
+          flash("You have landed at " + shortName(trip.to) + ". Press an arrow key to take off again.", 8);
+        } else {
+          state.speed = 150;
+          state.throttle = 0.7;
+          flash("You have arrived at " + shortName(trip.to) + ". You have the controls.", 6);
+        }
+      }
+    } else if (parked) {
+      // Standing on the runway. An arrow key starts a new flight from here.
+      if (input.up || input.down || input.left || input.right) {
+        parked = false;
+        state.height += 150;
+        state.speed = 70;
+        state.throttle = 0.4;
       }
     } else {
       updatePlane(state, input, dt, sampleGround);
@@ -1195,7 +1266,7 @@ function createGame(viewer, dataMode, world) {
 
   function updateHud(ground) {
     const kmh = Math.round(Math.abs(state.speed) * 3.6);
-    $("hud-speed").textContent = kmh + " km/h" + (trip && autopilot && timeScale > 1 ? " ×" + timeScale : "");
+    $("hud-speed").textContent = kmh + " km/h" + (trip && autopilot && flownScale > 1 ? " ×" + flownScale : "");
     const agl = ground !== undefined ? Math.max(0, Math.round(state.height - ground)) : null;
     $("hud-alt").textContent = agl !== null ? agl + " m above ground" : "—";
     $("hud-throttle").textContent = "Throttle " + Math.round(state.throttle * 100) + "%";

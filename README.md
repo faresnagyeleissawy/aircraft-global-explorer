@@ -7,10 +7,10 @@ A browser game for exploring the real world in 3D. Search for any place and fly 
 You need a Cesium ion access token. Sign in at [ion.cesium.com](https://ion.cesium.com), open **Access Tokens** and copy the **Default** token. The game asks for the token the first time it starts and keeps it only in your browser.
 
 ```bash
-npm start          # serves the folder at http://localhost:8080
+npm start          # runs server.js at http://localhost:8080 (Node 18+)
 ```
 
-Any static web server works, for example `python3 -m http.server 8080`. The page has to be served over http, because opening `index.html` as a file will not load the models.
+Any static web server also works, for example `python3 -m http.server 8080`, but then there are no live flights (see below). The page has to be served over http, because opening `index.html` as a file will not load the models.
 
 ### Hosting on GitHub Pages
 
@@ -37,6 +37,7 @@ The arrow keys and Shift are all you need. W and S also work for throttle up and
 - **Start screen**: the game opens by asking where to fly. Search for a place, type X (longitude) and Y (latitude), or pick a famous place, then press Start flying. "New start" in the panel brings the screen back.
 - **Coordinates** in the panel takes you to an X (longitude) and Y (latitude).
 - **Famous places** is a short list of cities and landmarks to jump to.
+- **Live flights**: real aircraft within about 185 km are drawn as yellow planes with their callsign and type, at their real position and height, and they keep moving between reports. Click one for its height and speed. The positions come from [adsb.lol](https://adsb.lol) every 10 seconds. That service cannot be called from a web page, so `server.js` relays it: live flights work when you run the game with `npm start`, and not on a static host such as GitHub Pages.
 - **Address as you go**: the display shows the nearest address or named place under the plane, refreshed every few seconds.
 - **Route from / to** draws the road route between two places as a yellow line and shows the distance left. Leave "from" empty to start where you are. With a typed start you are taken there, heading along the route. Routes longer than 300 km are refused.
 - **Building labels**: buildings that have a name or address in OpenStreetMap show it as a label when you are within 300 m. Click any building or spot to see its name and address; if the building has none of its own, the address of that point is looked up.
@@ -56,6 +57,7 @@ The Cesium ion Community plan is free for personal and non-commercial use. Comme
 - `src/physics.js` holds the movement model for the plane. It is plain JavaScript with no Cesium code, and it is unit tested.
 - `src/facade.js` is a shader that draws windows, glass and roofs on the plain OSM Buildings blocks, so the city looks built rather than like white boxes. The pattern is generated, not photographed, so it does not match each real building.
 - `src/route.js` holds the distance, bearing and route-progress helpers. It is also plain JavaScript and unit tested.
+- `src/flights.js` draws the live aircraft and `server.js` is the small local server that relays their positions.
 - `src/suggest.js` is the list of places under the search boxes and `src/labels.js` puts the name and address labels on buildings.
 - Addresses are looked up with OpenStreetMap's [Nominatim](https://nominatim.org) geocoder, which is free and needs no key but allows at most one search a second. The list shown while you type and the address under the plane come from [Photon](https://photon.komoot.io), another free OpenStreetMap geocoder that allows search-as-you-type. On Google's tiles the Google geocoder from Cesium ion is used instead, as Google's terms require. Routes come from the public [OSRM](https://project-osrm.org) demo server, which is free and needs no key but is best effort and meant for light use.
 - `src/main.js` turns off Cesium's mouse navigation, runs the game loop and moves the camera every frame. It finds the height of whatever is under the plane (terrain or a rooftop) with `scene.sampleHeight`; the plane crashes when it drops below that surface, and starts again in the air above it.
@@ -80,4 +82,5 @@ Open `http://localhost:8080/?offline` to run the game on a plain globe with no i
 - The plane model (`Cesium_Air.glb`) is a CesiumJS sample model © Cesium GS, Inc. ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).
 - Map data: Google, Cesium, OpenStreetMap contributors and Microsoft Bing, credited on screen.
 - Address search: [Nominatim](https://nominatim.org) and [Photon](https://photon.komoot.io) by Komoot, © OpenStreetMap contributors.
+- Live flights: [adsb.lol](https://adsb.lol), open data under the [ODbL](https://opendatacommons.org/licenses/odbl/).
 - Routes: [OSRM](https://project-osrm.org) demo server, using © OpenStreetMap contributors data ([ODbL](https://www.openstreetmap.org/copyright)).

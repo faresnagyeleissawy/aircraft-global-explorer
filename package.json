@@ -5,7 +5,7 @@
   "description": "Fly a plane over the real world in 3D with the arrow keys. Built on CesiumJS.",
   "type": "module",
   "scripts": {
-    "start": "npx --yes serve@14.2.4 -l 8080 .",
+    "start": "node server.js",
     "test": "node --test test/*.test.js"
   },
   "license": "MIT"

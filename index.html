@@ -47,6 +47,10 @@
       <div id="plane-tools">
         <button id="fly-burj" title="Fly to Burj Khalifa (B)">Fly to Burj Khalifa (B)</button>
       </div>
+      <label class="check">
+        <input type="checkbox" id="flights-toggle" checked />
+        <span>Live flights <span id="flights-note"></span></span>
+      </label>
       <label>
         Buildings
         <select id="data-select">
@@ -84,7 +88,7 @@
         <tr><td>Double-click</td><td>Fly to that spot on the map</td></tr>
       </table>
       <p>V switches between chase and inside view. R goes back to the start point. B flies to Burj Khalifa. H hides this.</p>
-      <p>Search takes you to any place in the world. "Route" draws the road between two places. The address you are flying over is shown under the speed.</p>
+      <p>Search takes you to any place in the world. "Route" draws the road between two places. The address you are flying over is shown under the speed. Yellow planes are real flights; click one to see which.</p>
     </div>
 
     <div id="start-dialog" class="dialog" hidden>

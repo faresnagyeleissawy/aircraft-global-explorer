@@ -2,6 +2,7 @@ import { createState, updatePlane, offset } from "./physics.js";
 import { PLACES } from "./places.js";
 import { createInput } from "./input.js";
 import { createFacade } from "./facade.js";
+import { createFlights } from "./flights.js";
 import { labelBuildings } from "./labels.js";
 import { attachSuggest } from "./suggest.js";
 import {
@@ -47,6 +48,8 @@ const REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&z
 // (Nominatim's rules do not allow that use).
 const SUGGEST_URL = "https://photon.komoot.io/api/?limit=6&lang=en";
 const AROUND_URL = "https://photon.komoot.io/reverse?lang=en";
+// Live aircraft come through the relay in server.js; a plain static host has none.
+const FLIGHTS_URL = "api/flights";
 const INFO_SECONDS = 12;
 const ADDRESS_EVERY = 4000; // ms between lookups of the address under the plane
 const ADDRESS_STEP = 100; // meters the plane must move before the address is looked up again
@@ -263,12 +266,13 @@ function createGame(viewer, dataMode, world) {
     model: { uri: "models/Cesium_Air.glb", scale: 1.5 },
     show: false,
   });
+  const flights = createFlights(Cesium, viewer, FLIGHTS_URL);
   const exclude = [];
 
   // Our own models, lines and labels must not count as ground under the player.
   function refreshExclude() {
     exclude.length = 0;
-    exclude.push(plane, ...routeEntities);
+    exclude.push(plane, ...routeEntities, ...flights.entities);
     if (info) exclude.push(info);
   }
   refreshExclude();
@@ -642,6 +646,23 @@ function createGame(viewer, dataMode, world) {
     window.location.reload();
   });
 
+  $("flights-toggle").addEventListener("change", (e) => {
+    flights.setEnabled(e.target.checked);
+    updateFlightsNote();
+    e.target.blur();
+  });
+
+  function updateFlightsNote() {
+    const toggle = $("flights-toggle");
+    if (!flights.available) {
+      toggle.checked = false;
+      toggle.disabled = true;
+      $("flights-note").textContent = "only when run with npm start";
+    } else {
+      $("flights-note").textContent = toggle.checked ? flights.count + " nearby" : "";
+    }
+  }
+
   $("help-toggle").addEventListener("click", (e) => {
     toggleHelp();
     e.currentTarget.blur();
@@ -706,6 +727,11 @@ function createGame(viewer, dataMode, world) {
     const spot = pickSpot(point);
     if (!spot) return;
     const feature = scene.pick(point);
+    const aircraft = feature && feature.id ? flights.describe(feature.id) : "";
+    if (aircraft) {
+      showInfo(spot, aircraft);
+      return;
+    }
     let text = feature instanceof Cesium.Cesium3DTileFeature ? buildingText(feature) : "";
     if (!text && !googleGeocoder) {
       const there = Cesium.Cartographic.fromCartesian(spot);
@@ -839,6 +865,11 @@ function createGame(viewer, dataMode, world) {
     updateCamera(dt);
     updateHud(lastGround);
     updateAddress(now);
+    flights.update(here(), now).then((changed) => {
+      if (!changed) return;
+      refreshExclude();
+      updateFlightsNote();
+    });
     plane.show = view === "chase";
   }
 

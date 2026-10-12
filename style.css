@@ -41,6 +41,19 @@ body {
   gap: 10px;
 }
 
+#panel label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--panel-text);
+  font-size: 13px;
+}
+
+#flights-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 #panel .title {
   font-weight: 700;
   font-size: 16px;

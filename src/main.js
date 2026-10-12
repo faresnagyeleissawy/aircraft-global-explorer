@@ -1,4 +1,4 @@
-import { createState, updaters, offset } from "./physics.js";
+import { createState, updatePlane, offset } from "./physics.js";
 import { PLACES } from "./places.js";
 import { createInput } from "./input.js";
 import { createFacade } from "./facade.js";
@@ -26,16 +26,10 @@ const PLACE_KEY = "dubai3d.place";
 const params = new URLSearchParams(window.location.search);
 const OFFLINE = params.has("offline");
 
-const MODES = ["car", "drone", "plane"];
-const MODE_LABELS = { car: "Car", drone: "Drone", plane: "Plane" };
 const PLANE_SPAWN_HEIGHT = 350;
-const DRONE_SPAWN_HEIGHT = 60;
-// Chase camera: distance behind each vehicle and how far down it looks (radians).
-const CHASE = {
-  car: { range: 14, pitch: -0.22, lift: 1.5 },
-  drone: { range: 9, pitch: -0.35, lift: 0 },
-  plane: { range: 45, pitch: -0.18, lift: 0 },
-};
+// Chase camera: distance behind the plane and how far down it looks (radians).
+const CHASE_RANGE = 45;
+const CHASE_PITCH = -0.18;
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 40;
 const RESPAWN_DELAY = 2.5;
@@ -45,8 +39,6 @@ const REANCHOR_DISTANCE = 15000;
 const MAX_DROP = 400;
 // Public OSRM demo server: free, no key, best effort.
 const ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
-const NEAREST_ROAD_URL = "https://router.project-osrm.org/nearest/v1/driving/";
-const MAX_SNAP = 500; // a car is moved onto a road only if one is this close, in meters
 // OpenStreetMap's Nominatim geocoder: free, no key, at most one search a second.
 const GEOCODE_URL = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=en";
 const REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=en";
@@ -225,11 +217,9 @@ function createGame(viewer, dataMode, world) {
   const HPR = Cesium.HeadingPitchRoll;
   const scratchCarto = new Cesium.Cartographic();
 
-  let mode = "plane";
-  let view = "chase"; // "chase" or "inside" for car and plane
+  let view = "chase"; // "chase" or "inside" (the pilot's seat)
   let place = PLACES.find((p) => p.id === storageGet(PLACE_KEY)) || PLACES[0];
   let state = createState(0, 0, 0, 0);
-  let pendingDrop = false; // waiting for ground data before landing in car mode
   let zoom = 1; // mouse wheel: multiplies the chase camera distance
   let crashTimer = 0;
   let camHeading = 0;
@@ -247,51 +237,29 @@ function createGame(viewer, dataMode, world) {
 
   const input = createInput(onAction);
 
-  // Vehicle models follow the shared state through callbacks.
+  // The plane model follows the shared state through callbacks.
   const position = new Cesium.CallbackPositionProperty(
     () => Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height),
     false
   );
-  const orientationFor = (headingOffset) =>
-    new Cesium.CallbackProperty(() => {
-      const pos = Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height);
-      // Model +X is forward; Cesium's model heading 0 points east, ours points north.
-      return Cesium.Transforms.headingPitchRollQuaternion(
-        pos,
-        new HPR(state.heading - Math.PI / 2 + headingOffset, state.pitch, state.roll)
-      );
-    }, false);
+  const orientation = new Cesium.CallbackProperty(() => {
+    const pos = Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height);
+    // Model +X is forward; Cesium's model heading 0 points east, ours points north.
+    return Cesium.Transforms.headingPitchRollQuaternion(pos, new HPR(state.heading - Math.PI / 2, state.pitch, state.roll));
+  }, false);
 
-  const car = viewer.entities.add({
-    position,
-    orientation: orientationFor(0),
-    model: { uri: "models/CesiumMilkTruck.glb", scale: 1.0 },
-    show: false,
-  });
   const plane = viewer.entities.add({
     position,
-    orientation: orientationFor(0),
+    orientation,
     model: { uri: "models/Cesium_Air.glb", scale: 1.5 },
     show: false,
   });
-  const drone = viewer.entities.add({
-    position,
-    orientation: orientationFor(0),
-    box: {
-      dimensions: new Cesium.Cartesian3(1.4, 1.4, 0.3),
-      material: Cesium.Color.fromCssColorString("#20252c"),
-      outline: true,
-      outlineColor: Cesium.Color.fromCssColorString("#f0b429"),
-    },
-    show: false,
-  });
-  const models = { car, drone, plane };
   const exclude = [];
 
   // Our own models, lines and labels must not count as ground under the player.
   function refreshExclude() {
     exclude.length = 0;
-    exclude.push(car, drone, plane, ...routeEntities);
+    exclude.push(plane, ...routeEntities);
     if (info) exclude.push(info);
   }
   refreshExclude();
@@ -309,14 +277,6 @@ function createGame(viewer, dataMode, world) {
     // local ground level.
     if (h !== undefined && h < anchor.ground - MAX_DROP) h = undefined;
     return h;
-  }
-
-  // On wheels, treat missing data as flat ground at the current height so the
-  // car is never frozen by a tile that has not loaded yet.
-  function groundForMode(lon, lat) {
-    const h = sampleGround(lon, lat);
-    if (h !== undefined) return h;
-    return mode === "car" ? state.height : undefined;
   }
 
   // ------------------------------------------------------------ search and routes
@@ -393,19 +353,6 @@ function createGame(viewer, dataMode, world) {
     } catch {
       return "";
     }
-  }
-
-  // The closest point on a road, or the point itself when no road is near.
-  async function nearestRoad(lon, lat) {
-    try {
-      const res = await fetch(NEAREST_ROAD_URL + lon.toFixed(6) + "," + lat.toFixed(6));
-      const data = await res.json();
-      const hit = data.waypoints && data.waypoints[0];
-      if (hit && hit.distance < MAX_SNAP) return { lon: hit.location[0], lat: hit.location[1] };
-    } catch {
-      // Fall through: staying off the road is better than not travelling.
-    }
-    return { lon, lat };
   }
 
   async function fetchRoute(from, to) {
@@ -563,11 +510,8 @@ function createGame(viewer, dataMode, world) {
       const from = fromText.trim() ? await resolvePlace("route-from") : here();
       const points = await fetchRoute(from, to);
       showRoute(points);
-      // A car always starts exactly on the first point of the line, facing
-      // along it. Flying, you are only moved when you typed a start.
-      if (mode === "car" || fromText.trim()) {
-        await travelTo(points[0].lon, points[0].lat, bearing(points[0], points[1]), false);
-      }
+      // With a typed start you are taken there, heading along the route.
+      if (fromText.trim()) await travelTo(points[0].lon, points[0].lat, bearing(points[0], points[1]));
       return "Follow the yellow line: " + formatDistance(route.length) + " to " + to.name;
     });
   });
@@ -605,12 +549,6 @@ function createGame(viewer, dataMode, world) {
     window.location.reload();
   });
 
-  for (const m of MODES) {
-    $("mode-" + m).addEventListener("click", (e) => {
-      setMode(m);
-      e.currentTarget.blur();
-    });
-  }
   $("help-toggle").addEventListener("click", (e) => {
     toggleHelp();
     e.currentTarget.blur();
@@ -676,21 +614,17 @@ function createGame(viewer, dataMode, world) {
   }
 
   function onAction(code) {
-    if (code === "Digit1") setMode("car");
-    else if (code === "Digit2") setMode("drone");
-    else if (code === "Digit3") setMode("plane");
-    else if (code === "KeyC") setMode(MODES[(MODES.indexOf(mode) + 1) % MODES.length]);
-    else if (code === "KeyV") view = view === "chase" ? "inside" : "chase";
+    if (code === "KeyV") view = view === "chase" ? "inside" : "chase";
     else if (code === "KeyR") spawn();
     else if (code === "KeyH") toggleHelp();
     else if (code === "KeyB") flyToBurjKhalifa();
   }
 
-  // ------------------------------------------------------------ modes
+  // ------------------------------------------------------------ travel
 
   function spawn() {
     // Flying from Downtown starts with the tower in front of you.
-    if (mode === "plane" && place.id === "downtown") flyToBurjKhalifa();
+    if (place.id === "downtown") flyToBurjKhalifa();
     else travelTo(place.lon, place.lat, toRad(place.heading));
   }
 
@@ -705,11 +639,9 @@ function createGame(viewer, dataMode, world) {
     }
   }
 
-  // Sends the player to a point anywhere in the world (degrees). A car is put
-  // on the nearest road, unless the point is already known to be on one.
-  async function travelTo(lon, lat, heading, snapToRoad = true) {
-    const spot = snapToRoad && mode === "car" ? await nearestRoad(lon, lat) : { lon, lat };
-    placeAt(spot.lon, spot.lat, heading, await terrainHeight(spot.lon, spot.lat));
+  // Sends the plane to a point anywhere in the world (degrees).
+  async function travelTo(lon, lat, heading) {
+    placeAt(lon, lat, heading, await terrainHeight(lon, lat));
   }
 
   // Midday sun wherever the player is, so buildings are lit from above.
@@ -726,73 +658,24 @@ function createGame(viewer, dataMode, world) {
     if (world.facade) world.facade.setAnchor(lon, lat, ground);
   }
 
-  // Puts the player `lift` meters above ground level at a point (degrees). A
-  // car then drops to the ground.
-  function placeAt(lon, lat, heading, ground, lift = mode === "drone" ? DRONE_SPAWN_HEIGHT : PLANE_SPAWN_HEIGHT) {
+  // Puts the plane in the air, `lift` meters above ground level at a point (degrees).
+  function placeAt(lon, lat, heading, ground, lift = PLANE_SPAWN_HEIGHT) {
     state = createState(toRad(lon), toRad(lat), ground + lift, heading);
     setAnchor(lon, lat, ground);
     placed = true;
     camHeading = heading;
     crashTimer = 0;
     lastGround = undefined;
-    if (mode === "plane") state.speed = 70;
-    pendingDrop = mode === "car";
-    showMessage(pendingDrop ? "Loading the ground…" : "");
+    state.speed = 70;
+    showMessage("");
   }
 
   // Starts a flight 3 km south-west of Burj Khalifa, aimed just to the right
   // of the tower so it stays in view as you pass it.
   function flyToBurjKhalifa() {
-    if (mode !== "plane") setMode("plane");
     const start = offset(toRad(BURJ_KHALIFA.lon), toRad(BURJ_KHALIFA.lat), 3000, toRad(225));
     placeAt(toDeg(start.lon), toDeg(start.lat), toRad(52), DUBAI_GROUND, 530);
     flash("Burj Khalifa ahead", 4);
-  }
-
-  function setMode(next) {
-    if (next === mode) return;
-    const prev = mode;
-    mode = next;
-    state.speed = 0;
-    state.vz = 0;
-    state.roll = 0;
-    state.pitch = 0;
-    state.crashed = false;
-    crashTimer = 0;
-
-    if (next === "plane") {
-      // Take off from wherever you are.
-      if (prev !== "plane") state.height += 150;
-      state.speed = 70;
-      state.throttle = 0.4;
-      showMessage("");
-    } else if (next === "drone") {
-      // Lift off from the road; coming from the plane, hover where you are.
-      if (prev === "car") state.height += 30;
-      pendingDrop = false;
-      showMessage("");
-    } else {
-      const g = sampleGround(state.lon, state.lat);
-      if (g !== undefined) {
-        state.height = g;
-        pendingDrop = false;
-        showMessage("");
-      } else {
-        pendingDrop = true;
-        showMessage("Loading the ground…");
-      }
-    }
-    camHeading = state.heading;
-    updateModeButtons();
-  }
-
-  function updateModeButtons() {
-    for (const m of MODES) {
-      $("mode-" + m).classList.toggle("active", m === mode);
-      models[m].show = m === mode && view === "chase";
-    }
-    $("hud-mode").textContent = MODE_LABELS[mode];
-    $("plane-tools").hidden = mode !== "plane";
   }
 
   // ------------------------------------------------------------ loop
@@ -813,19 +696,6 @@ function createGame(viewer, dataMode, world) {
       });
     }
 
-    if (pendingDrop) {
-      const g = sampleGround(state.lon, state.lat);
-      if (g !== undefined) {
-        state.height = g;
-        pendingDrop = false;
-        showMessage("");
-      } else {
-        hoverCamera();
-        updateHud(undefined);
-        return;
-      }
-    }
-
     if (state.crashed) {
       crashTimer += dt;
       if (crashTimer > RESPAWN_DELAY) {
@@ -840,50 +710,35 @@ function createGame(viewer, dataMode, world) {
         showMessage("");
       }
     } else {
-      updaters[mode](state, input, dt, groundForMode);
+      updatePlane(state, input, dt, sampleGround);
       if (state.crashed) showMessage("Crashed! Respawning…");
     }
 
     lastGround = sampleGround(state.lon, state.lat);
     updateCamera(dt);
     updateHud(lastGround);
-    for (const m of MODES) models[m].show = m === mode && view === "chase";
-  }
-
-  function hoverCamera() {
-    camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
-    camera.setView({
-      destination: Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height),
-      orientation: { heading: state.heading, pitch: Cesium.Math.toRadians(-89), roll: 0 },
-    });
+    plane.show = view === "chase";
   }
 
   function updateCamera(dt) {
     if (view === "inside") {
-      const eye = mode === "car" ? 2.2 : mode === "plane" ? 1.2 : 0;
       camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
       camera.setView({
-        destination: Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height + eye),
-        // The drone's camera looks a little down, like a real one.
-        orientation: {
-          heading: state.heading,
-          pitch: mode === "drone" ? -0.3 : state.pitch,
-          roll: mode === "plane" ? state.roll : 0,
-        },
+        destination: Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height + 1.2),
+        orientation: { heading: state.heading, pitch: state.pitch, roll: state.roll },
       });
       return;
     }
 
-    // Chase camera: trails behind the vehicle and swings round smoothly on turns.
+    // Chase camera: trails behind the plane and swings round smoothly on turns.
     let diff = state.heading - camHeading;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-    camHeading += diff * Math.min(1, dt * (mode === "car" ? 4 : 2.5));
+    camHeading += diff * Math.min(1, dt * 2.5);
 
     // Zooming out also tilts the camera down, towards a map-like view from above.
-    const chase = CHASE[mode];
-    const pitch = Math.max(-1.3, chase.pitch - Math.max(0, Math.log(zoom)) * 0.3);
-    const target = Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height + chase.lift);
-    camera.lookAt(target, new Cesium.HeadingPitchRange(camHeading, pitch, chase.range * zoom));
+    const pitch = Math.max(-1.3, CHASE_PITCH - Math.max(0, Math.log(zoom)) * 0.3);
+    const target = Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height);
+    camera.lookAt(target, new Cesium.HeadingPitchRange(camHeading, pitch, CHASE_RANGE * zoom));
   }
 
   // ------------------------------------------------------------ HUD
@@ -903,10 +758,9 @@ function createGame(viewer, dataMode, world) {
 
   function updateTarget() {
     if (!route) {
-      // In the air over Dubai, point to the tower instead.
+      // Over Dubai, point to the tower instead.
       const toTower = distance(here(), BURJ_KHALIFA);
-      const show = mode === "plane" && toTower < 50000;
-      $("hud-target").textContent = show ? pointer(BURJ_KHALIFA.name, BURJ_KHALIFA, toTower) : "";
+      $("hud-target").textContent = toTower < 50000 ? pointer(BURJ_KHALIFA.name, BURJ_KHALIFA, toTower) : "";
       return;
     }
     const left = remaining(route, here());
@@ -928,14 +782,12 @@ function createGame(viewer, dataMode, world) {
     const kmh = Math.round(Math.abs(state.speed) * 3.6);
     $("hud-speed").textContent = kmh + " km/h";
     const agl = ground !== undefined ? Math.max(0, Math.round(state.height - ground)) : null;
-    $("hud-alt").textContent = mode === "car" ? "" : agl !== null ? agl + " m above ground" : "—";
-    $("hud-throttle").textContent = mode === "plane" ? "Throttle " + Math.round(state.throttle * 100) + "%" : "";
+    $("hud-alt").textContent = agl !== null ? agl + " m above ground" : "—";
+    $("hud-throttle").textContent = "Throttle " + Math.round(state.throttle * 100) + "%";
     const deg = Math.round(Cesium.Math.toDegrees(state.heading) + 360) % 360;
     $("hud-heading").textContent = deg + "° " + compass(deg);
     updateTarget();
-    if (!state.crashed && !pendingDrop) {
-      showMessage(state.blocked ? "Blocked" : performance.now() < flashUntil ? flashText : "");
-    }
+    if (!state.crashed) showMessage(performance.now() < flashUntil ? flashText : "");
   }
 
   function compass(deg) {
@@ -944,7 +796,6 @@ function createGame(viewer, dataMode, world) {
 
   return {
     start() {
-      updateModeButtons();
       spawn();
       scene.postRender.addEventListener(tick);
       // Exposed for automated tests and debugging.
@@ -952,10 +803,6 @@ function createGame(viewer, dataMode, world) {
         get state() {
           return state;
         },
-        get mode() {
-          return mode;
-        },
-        setMode,
         spawn,
       };
     },

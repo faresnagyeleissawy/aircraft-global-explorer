@@ -1,5 +1,5 @@
 // Famous places to jump to. Coordinates are approximate; heading is in degrees
-// (0 = north). You arrive in the air and drop to the ground in car mode.
+// (0 = north). You arrive in the air, heading that way.
 export const PLACES = [
   { id: "downtown", name: "Dubai: Burj Khalifa", lat: 25.1915, lon: 55.2705, heading: 50 },
   { id: "museum", name: "Dubai: Museum of the Future", lat: 25.2165, lon: 55.2775, heading: 40 },

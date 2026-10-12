@@ -23,11 +23,6 @@
         Famous places
         <select id="place-select"></select>
       </label>
-      <div class="modes">
-        <button id="mode-car" title="Car (1)">Car</button>
-        <button id="mode-drone" title="Drone (2)">Drone</button>
-        <button id="mode-plane" title="Plane (3)">Plane</button>
-      </div>
       <div id="nav">
         <form id="route-form">
           <label for="route-from">Route from</label>
@@ -41,7 +36,7 @@
         </form>
         <div id="nav-status" aria-live="polite"></div>
       </div>
-      <div id="plane-tools" hidden>
+      <div id="plane-tools">
         <button id="fly-burj" title="Fly to Burj Khalifa (B)">Fly to Burj Khalifa (B)</button>
       </div>
       <label>
@@ -58,7 +53,6 @@
     </div>
 
     <div id="hud">
-      <div id="hud-mode"></div>
       <div id="hud-speed"></div>
       <div id="hud-alt"></div>
       <div id="hud-throttle"></div>
@@ -71,16 +65,14 @@
     <div id="help" hidden>
       <h2>Controls</h2>
       <table>
-        <tr><th></th><th>Car</th><th>Drone</th><th>Plane</th></tr>
-        <tr><td>↑ / ↓</td><td>Accelerate / brake, reverse</td><td>Forward / back</td><td>Climb / dive</td></tr>
-        <tr><td>← / →</td><td>Steer</td><td>Turn</td><td>Bank and turn</td></tr>
-        <tr><td>Shift</td><td>Boost</td><td>With ↑ / ↓: up / down</td><td>More throttle</td></tr>
-        <tr><td>Space</td><td>Handbrake</td><td></td><td></td></tr>
-        <tr><td>Mouse wheel</td><td colspan="3">Zoom in and out</td></tr>
-        <tr><td>Click</td><td colspan="3">Show the name and address of that building or spot</td></tr>
-        <tr><td>Double-click</td><td colspan="3">Go to that spot on the map</td></tr>
+        <tr><td>↑ / ↓</td><td>Climb / dive</td></tr>
+        <tr><td>← / →</td><td>Bank and turn</td></tr>
+        <tr><td>Shift</td><td>More throttle (W / S: throttle up / down)</td></tr>
+        <tr><td>Mouse wheel</td><td>Zoom in and out</td></tr>
+        <tr><td>Click</td><td>Show the name and address of that building or spot</td></tr>
+        <tr><td>Double-click</td><td>Fly to that spot on the map</td></tr>
       </table>
-      <p>1, 2, 3 or C switch between car, drone and plane. V switches between chase and inside view. R goes back to the start point. B flies to Burj Khalifa. H hides this.</p>
+      <p>V switches between chase and inside view. R goes back to the start point. B flies to Burj Khalifa. H hides this.</p>
       <p>Search takes you to any place in the world. "Route" draws the road between two places.</p>
     </div>
 

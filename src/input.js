@@ -1,5 +1,5 @@
-// Keyboard state. Arrow keys (with Shift) are all a vehicle needs; W and S
-// are extra keys for plane throttle and drone height. Other keys trigger actions.
+// Keyboard state. The arrow keys (with Shift for more throttle) are all the
+// plane needs; W and S are extra keys for throttle. Other keys trigger actions.
 const KEY_MAP = {
   ArrowUp: "up",
   ArrowDown: "down",
@@ -7,7 +7,6 @@ const KEY_MAP = {
   ArrowRight: "right",
   ShiftLeft: "boost",
   ShiftRight: "boost",
-  Space: "brake",
   KeyW: "throttleUp",
   KeyS: "throttleDown",
 };
@@ -19,7 +18,6 @@ export function createInput(onAction) {
     left: false,
     right: false,
     boost: false,
-    brake: false,
     throttleUp: false,
     throttleDown: false,
   };

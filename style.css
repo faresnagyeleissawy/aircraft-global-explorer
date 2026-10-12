@@ -69,28 +69,6 @@ input {
   padding: 6px 8px;
 }
 
-.modes {
-  display: flex;
-  gap: 6px;
-}
-
-.modes button {
-  flex: 1;
-  padding: 7px 0;
-  border-radius: 6px;
-  border: 1px solid #39414d;
-  background: #0d1015;
-  color: var(--panel-text);
-  cursor: pointer;
-}
-
-.modes button.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #111;
-  font-weight: 600;
-}
-
 #nav,
 #nav form,
 #search-form {
@@ -199,14 +177,6 @@ button.link {
   min-width: 170px;
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-
-#hud-mode {
-  color: var(--accent);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 12px;
 }
 
 #hud-speed {

@@ -1,5 +1,5 @@
 {
-  "name": "dubai-3d-explorer",
+  "name": "aircraft-global-explorer",
   "version": "0.1.0",
   "private": true,
   "description": "Fly a plane over the real world in 3D with the arrow keys. Built on CesiumJS.",

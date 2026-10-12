@@ -1,6 +1,6 @@
-# World 3D Explorer
+# Aircraft Global Explorer
 
-A browser game for exploring the real world in 3D. Search for any place and fly a plane there, steering with the arrow keys, or type two airport codes such as DXB and LHR and ride the flight between them as a passenger. It started as a Dubai explorer, which is why the repository is called `dubai-3d-explorer` and Dubai is where you start. It is built on [CesiumJS](https://cesium.com/platform/cesiumjs/) (open source, Apache 2.0) and uses map data from a free [Cesium ion](https://ion.cesium.com) account.
+A browser game for exploring the real world in 3D. Search for any place and fly a plane there, steering with the arrow keys, or type two airport codes such as DXB and LHR and ride the flight between them as a passenger. The famous places list starts in Dubai. It is built on [CesiumJS](https://cesium.com/platform/cesiumjs/) (open source, Apache 2.0) and uses map data from a free [Cesium ion](https://ion.cesium.com) account.
 
 ## Run it
 

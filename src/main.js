@@ -857,7 +857,7 @@ function createGame(viewer, dataMode, world) {
     $("start-dialog").hidden = true;
     $("help").hidden = true;
     try {
-      caption("World 3D Explorer: fly anywhere on Earth");
+      caption("Aircraft Global Explorer: fly anywhere on Earth");
       clearRoute();
       setView("chase");
       flyToBurjKhalifa();
@@ -916,7 +916,7 @@ function createGame(viewer, dataMode, world) {
         await pause(58);
       }
 
-      caption("Try it: faresnagyeleissawy.github.io/dubai-3d-explorer");
+      caption("Try it: faresnagyeleissawy.github.io/aircraft-global-explorer");
       await pause(6);
     } catch (err) {
       if (!err || err.message !== "demo stopped") console.error(err);

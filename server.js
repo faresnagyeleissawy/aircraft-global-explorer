@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 const PORT = Number(process.env.PORT) || 8080;
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const FLIGHTS_API = "https://api.adsb.lol/v2/point/";
-const USER_AGENT = "world-3d-explorer (https://github.com/faresnagyeleissawy/dubai-3d-explorer)";
+const USER_AGENT = "aircraft-global-explorer (https://github.com/faresnagyeleissawy/aircraft-global-explorer)";
 const MAX_RADIUS = 250; // nautical miles, the most the service allows
 const CACHE_MS = 5000; // repeat requests for the same area reuse the last answer
 
@@ -86,5 +86,5 @@ createServer((req, res) => {
   else if (url.pathname === "/api/flights") flights(url.searchParams, res);
   else file(url.pathname, res);
 }).listen(PORT, "127.0.0.1", () => {
-  console.log("World 3D Explorer: http://localhost:" + PORT);
+  console.log("Aircraft Global Explorer: http://localhost:" + PORT);
 });

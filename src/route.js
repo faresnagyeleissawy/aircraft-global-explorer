@@ -24,6 +24,30 @@ export function bearing(a, b) {
   return (Math.atan2(y, x) + twoPi) % twoPi;
 }
 
+// Points along the shortest path over the globe from a to b, both included:
+// the line a flight between them follows.
+export function greatCircle(a, b, steps) {
+  const vector = (p) => {
+    const lat = rad(p.lat);
+    const lon = rad(p.lon);
+    return [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)];
+  };
+  const va = vector(a);
+  const vb = vector(b);
+  const dot = Math.min(1, Math.max(-1, va[0] * vb[0] + va[1] * vb[1] + va[2] * vb[2]));
+  const angle = Math.acos(dot);
+  if (angle < 1e-9) return [a, b];
+  const points = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const wa = Math.sin((1 - t) * angle) / Math.sin(angle);
+    const wb = Math.sin(t * angle) / Math.sin(angle);
+    const [x, y, z] = [0, 1, 2].map((k) => wa * va[k] + wb * vb[k]);
+    points.push({ lon: (Math.atan2(y, x) * 180) / Math.PI, lat: (Math.atan2(z, Math.hypot(x, y)) * 180) / Math.PI });
+  }
+  return points;
+}
+
 // "25.19, 55.27" typed into a search box.
 export function parseLatLon(text) {
   const m = /^\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)\s*$/.exec(text);

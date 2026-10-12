@@ -35,6 +35,7 @@ The arrow keys and Shift are all you need. W and S also work for throttle up and
 
 - **Search** moves you to any address or place in the world. While you type, a list of matching places appears; pick one with the mouse or the arrow keys and Enter. You can also type coordinates as `lat, lon`.
 - **Start screen**: the game opens by asking where to fly. Search for a place, type X (longitude) and Y (latitude), or pick a famous place, then press Start flying. "New start" in the panel brings the screen back.
+- **Trip on the map**: "pick a trip on the map" on the start screen or in the panel shows the map from high above. Drag and zoom it, click where the trip starts and then where it ends, and press Start flying. You start at the first point with a yellow line to the second, along the path a real flight between them takes.
 - **Coordinates** in the panel takes you to an X (longitude) and Y (latitude).
 - **Famous places** is a short list of cities and landmarks to jump to.
 - **Live flights**: real aircraft within about 185 km are drawn as yellow planes with their callsign and type, at their real position and height, and they keep moving between reports. Click one for its height and speed. The positions come from [adsb.lol](https://adsb.lol) every 10 seconds. That service cannot be called from a web page, so `server.js` relays it: live flights work when you run the game with `npm start`, and not on a static host such as GitHub Pages.

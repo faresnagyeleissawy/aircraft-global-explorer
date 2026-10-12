@@ -42,6 +42,7 @@
             <button type="button" id="route-clear">Clear</button>
           </div>
         </form>
+        <button type="button" id="pick-trip">Pick a trip on the map</button>
         <div id="nav-status" aria-live="polite"></div>
       </div>
       <div id="plane-tools">
@@ -75,6 +76,13 @@
     </div>
 
     <div id="hud-message" hidden></div>
+
+    <div id="pick-bar" hidden>
+      <span id="pick-text"></span>
+      <button type="button" id="pick-go">Start flying</button>
+      <button type="button" id="pick-again">Pick again</button>
+      <button type="button" id="pick-cancel">Cancel</button>
+    </div>
 
     <div id="help" hidden>
       <h2>Controls</h2>
@@ -110,6 +118,7 @@
         </label>
         <p id="start-error" class="error" hidden></p>
         <button type="submit">Start flying</button>
+        <button type="button" id="start-map" class="second">Or pick a trip on the map: from one point to another</button>
       </form>
     </div>
 

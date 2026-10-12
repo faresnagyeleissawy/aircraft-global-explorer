@@ -8,6 +8,7 @@ import {
   createRoute,
   remaining,
   formatDistance,
+  greatCircle,
   placeName,
   shortAddress,
   BURJ_KHALIFA,
@@ -45,6 +46,19 @@ test("remaining distance shrinks as you follow the route", () => {
   assert.ok(Math.abs(remaining(route, A) - 1000) < 1);
   assert.ok(Math.abs(remaining(route, north(500)) - 500) < 1);
   assert.ok(remaining(route, north(1000)) < 1);
+});
+
+test("greatCircle joins two points along the shortest path", () => {
+  const dubai = { lon: 55.36, lat: 25.25 };
+  const london = { lon: -0.45, lat: 51.47 };
+  const line = greatCircle(dubai, london, 50);
+  assert.equal(line.length, 51);
+  assert.ok(distance(line[0], dubai) < 1 && distance(line[50], london) < 1, "ends where asked");
+  assert.ok(Math.abs(createRoute(line).length - distance(dubai, london)) < 1000, "as long as the direct distance");
+  // Flights between them arc north of the straight line on a flat map.
+  assert.ok(line[25].lat > (dubai.lat + london.lat) / 2);
+  const mid = greatCircle({ lon: 0, lat: 0 }, { lon: 90, lat: 0 }, 2)[1];
+  assert.ok(Math.abs(mid.lon - 45) < 1e-9 && Math.abs(mid.lat) < 1e-9);
 });
 
 test("formatDistance switches from meters to kilometers", () => {

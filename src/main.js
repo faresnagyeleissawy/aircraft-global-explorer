@@ -11,6 +11,7 @@ import {
   createRoute,
   distance,
   formatDistance,
+  greatCircle,
   parseLatLon,
   parseXY,
   placeName,
@@ -35,7 +36,8 @@ const CHASE_PITCH = -0.18;
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 40;
 const RESPAWN_DELAY = 2.5;
-const ARRIVE_DISTANCE = 25;
+const ARRIVE_DISTANCE = 300;
+const MAP_HEIGHT = 2500000; // camera height, in meters, when a trip is picked on the map
 const MAX_ROUTE_LENGTH = 300000; // longer lines are too heavy to drape on the ground
 const REANCHOR_DISTANCE = 15000;
 const MAX_DROP = 400;
@@ -230,6 +232,7 @@ function createGame(viewer, dataMode, world) {
   let state = createState(0, 0, 0, 0);
   let zoom = 1; // mouse wheel: multiplies the chase camera distance
   let orbit = { heading: 0, pitch: 0 }; // mouse drag: turns and tilts the chase camera (radians)
+  let picking = null; // while a trip is being picked on the map: { points, marks }
   let crashTimer = 0;
   let camHeading = 0;
   let lastTime = performance.now();
@@ -576,6 +579,98 @@ function createGame(viewer, dataMode, world) {
     e.currentTarget.blur();
   });
 
+  // ------------------------------------------------------------ trip on the map
+
+  // The flight stops and the map takes over: Cesium's own mouse controls move
+  // it, and two clicks set where the trip starts and ends.
+  function startPicking() {
+    $("start-dialog").hidden = true;
+    picking = { points: [], marks: [] };
+    plane.show = false;
+    showMessage("");
+    const centre = placed ? here() : place;
+    camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    camera.setView({ destination: Cesium.Cartesian3.fromDegrees(centre.lon, centre.lat, MAP_HEIGHT) });
+    scene.screenSpaceCameraController.enableInputs = true;
+    updatePickBar();
+  }
+
+  function clearPickMarks() {
+    for (const mark of picking.marks) viewer.entities.remove(mark);
+    picking.points = [];
+    picking.marks = [];
+  }
+
+  function pickPoint(point) {
+    if (picking.points.length === 2) return;
+    const spot = pickSpot(point) || camera.pickEllipsoid(point);
+    if (!Cesium.defined(spot)) return;
+    const there = Cesium.Cartographic.fromCartesian(spot);
+    const chosen = { lon: toDeg(there.longitude), lat: toDeg(there.latitude) };
+    picking.points.push(chosen);
+    picking.marks.push(marker(chosen, picking.points.length === 1 ? "Start" : "Destination"));
+    if (picking.points.length === 2) {
+      const [a, b] = picking.points;
+      picking.marks.push(
+        viewer.entities.add({
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray([a.lon, a.lat, b.lon, b.lat]),
+            width: 4,
+            clampToGround: true,
+            material: Cesium.Color.fromCssColorString("#f0b429"),
+          },
+        })
+      );
+    }
+    updatePickBar();
+  }
+
+  function updatePickBar() {
+    const count = picking ? picking.points.length : 0;
+    $("pick-bar").hidden = !picking;
+    $("pick-go").disabled = count < 2;
+    $("pick-again").disabled = count === 0;
+    $("pick-text").textContent =
+      count === 0
+        ? "Click the map where your trip starts. Drag to move the map, use the wheel to zoom."
+        : count === 1
+          ? "Now click your destination."
+          : "Trip: " + formatDistance(distance(picking.points[0], picking.points[1])) + " in a straight line.";
+  }
+
+  // Leaves the map. With fly = true the plane starts at the first point,
+  // heading for the second along the line a real flight would take.
+  function stopPicking(fly) {
+    const [a, b] = picking.points;
+    clearPickMarks();
+    picking = null;
+    scene.screenSpaceCameraController.enableInputs = false;
+    updatePickBar();
+    if (fly && a && b) {
+      const length = distance(a, b);
+      const line = greatCircle(a, b, Math.max(2, Math.min(400, Math.ceil(length / 5000))));
+      showRoute(line);
+      travelTo(a.lon, a.lat, bearing(line[0], line[1]));
+      $("nav-status").classList.remove("error");
+      $("nav-status").textContent = "Follow the yellow line: " + formatDistance(length) + " to your destination";
+    } else if (!placed) {
+      openStart();
+    }
+  }
+
+  for (const id of ["start-map", "pick-trip"]) {
+    $(id).addEventListener("click", (e) => {
+      startPicking();
+      e.currentTarget.blur();
+    });
+  }
+  $("pick-go").addEventListener("click", () => stopPicking(true));
+  $("pick-cancel").addEventListener("click", () => stopPicking(false));
+  $("pick-again").addEventListener("click", () => {
+    clearPickMarks();
+    updatePickBar();
+  });
+
   // ------------------------------------------------------------ start screen
 
   // The game waits on this screen until a start point is chosen: a searched
@@ -681,7 +776,7 @@ function createGame(viewer, dataMode, world) {
   window.addEventListener("pointermove", (e) => {
     if (!drag) return;
     if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > 4) dragged = true;
-    if (!dragged) return;
+    if (!dragged || picking) return;
     orbit.heading -= (e.clientX - drag.x) * 0.006;
     orbit.pitch -= (e.clientY - drag.y) * 0.005;
     drag.x = e.clientX;
@@ -693,12 +788,14 @@ function createGame(viewer, dataMode, world) {
   });
   canvas.addEventListener("contextmenu", (e) => {
     e.preventDefault();
+    if (picking) return;
     orbit = { heading: 0, pitch: 0 };
     zoom = 1;
   });
   canvas.addEventListener(
     "wheel",
     (e) => {
+      if (picking) return; // the map handles its own zoom
       e.preventDefault();
       zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * Math.exp(e.deltaY * 0.0015)));
       view = "chase";
@@ -744,11 +841,16 @@ function createGame(viewer, dataMode, world) {
   canvas.addEventListener("click", (e) => {
     if (dragged) return; // the end of a drag, not a click
     const point = mousePoint(e);
+    if (picking) {
+      pickPoint(point);
+      return;
+    }
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => identify(point), 300); // long enough for a double-click to cancel it
   });
   canvas.addEventListener("dblclick", (e) => {
     clearTimeout(clickTimer);
+    if (picking) return;
     const spot = pickSpot(mousePoint(e));
     if (!spot) return;
     const there = Cesium.Cartographic.fromCartesian(spot);
@@ -760,7 +862,7 @@ function createGame(viewer, dataMode, world) {
   }
 
   function onAction(code) {
-    if (!placed) return; // still on the start screen
+    if (!placed || picking) return; // still choosing where to fly
     if (code === "KeyV") view = view === "chase" ? "inside" : "chase";
     else if (code === "KeyR") spawn();
     else if (code === "KeyH") toggleHelp();
@@ -831,7 +933,7 @@ function createGame(viewer, dataMode, world) {
     const now = performance.now();
     const dt = Math.min(0.1, (now - lastTime) / 1000);
     lastTime = now;
-    if (!placed) return;
+    if (!placed || picking) return;
 
     // After a long trip, move the sun and the building shader along too.
     if (!reanchoring && distance(here(), anchor) > REANCHOR_DISTANCE) {

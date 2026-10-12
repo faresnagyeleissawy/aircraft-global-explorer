@@ -8,4 +8,4 @@
 //   - Scopes: assets:read and geocode only.
 //   - Allowed URLs: the address of your site, so it works nowhere else.
 // Its use counts against your account's monthly limits.
-export const PUBLIC_ION_TOKEN = "";
+export const PUBLIC_ION_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6ImRkNmZPZ1FfUUtidl82M3MiLCJqdGkiOiIxMDIyM2UwZi01MmE5LTQyNDQtYTUxNy01YzJlNTIwNWVlNmEiLCJpZCI6MjI0MDA0LCJzdWIiOiJmYXJlc25hZ3llbGVpc3Nhd3kiLCJpc3MiOiJodHRwczovL2FwaS5jZXNpdW0uY29tIiwiYXVkIjoiYWlyY3JhZnQtZ2xvYmFsLWV4cGxvcmVyIHNpdGUiLCJpYXQiOjE3OTE4MTQxODJ9.DJ6HPa9IW_MrPRqXJ4xOLssxwEx4Z2kRqBBE9GajJt8";

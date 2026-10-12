@@ -24,6 +24,8 @@ Go to **Settings → Pages** in the repository and choose "Deploy from a branch"
 | ← / → | Bank and turn |
 | Shift | More throttle |
 | Mouse wheel | Zoom in and out |
+| Drag | Tilt and turn the view around the plane |
+| Right-click | Put the view back behind the plane |
 | Click | Show the name and address of that building or spot |
 | Double-click | Fly to that spot on the map |
 

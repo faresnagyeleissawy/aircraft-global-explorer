@@ -226,6 +226,7 @@ function createGame(viewer, dataMode, world) {
   let place = PLACES.find((p) => p.id === storageGet(PLACE_KEY)) || PLACES[0];
   let state = createState(0, 0, 0, 0);
   let zoom = 1; // mouse wheel: multiplies the chase camera distance
+  let orbit = { heading: 0, pitch: 0 }; // mouse drag: turns and tilts the chase camera (radians)
   let crashTimer = 0;
   let camHeading = 0;
   let lastTime = performance.now();
@@ -646,8 +647,34 @@ function createGame(viewer, dataMode, world) {
     e.currentTarget.blur();
   });
 
-  // Mouse: the wheel zooms the chase camera, a double-click goes to that spot.
+  // Mouse: the wheel zooms the chase camera, dragging turns and tilts it, a
+  // right-click puts it back, and a double-click goes to that spot.
   const canvas = scene.canvas;
+  let drag = null; // last pointer position while the left button is held
+  let dragged = false; // true once the pointer has moved far enough to count as a drag
+  canvas.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    drag = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY };
+    dragged = false;
+  });
+  window.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > 4) dragged = true;
+    if (!dragged) return;
+    orbit.heading -= (e.clientX - drag.x) * 0.006;
+    orbit.pitch -= (e.clientY - drag.y) * 0.005;
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    view = "chase";
+  });
+  window.addEventListener("pointerup", () => {
+    drag = null;
+  });
+  canvas.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    orbit = { heading: 0, pitch: 0 };
+    zoom = 1;
+  });
   canvas.addEventListener(
     "wheel",
     (e) => {
@@ -689,6 +716,7 @@ function createGame(viewer, dataMode, world) {
 
   let clickTimer = 0;
   canvas.addEventListener("click", (e) => {
+    if (dragged) return; // the end of a drag, not a click
     const point = mousePoint(e);
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => identify(point), 300); // long enough for a double-click to cancel it
@@ -830,9 +858,12 @@ function createGame(viewer, dataMode, world) {
     camHeading += diff * Math.min(1, dt * 2.5);
 
     // Zooming out also tilts the camera down, towards a map-like view from above.
-    const pitch = Math.max(-1.3, CHASE_PITCH - Math.max(0, Math.log(zoom)) * 0.3);
+    // Dragging the mouse adds its own turn and tilt, from straight down to a little upwards.
+    const zoomTilt = Math.max(-1.3, CHASE_PITCH - Math.max(0, Math.log(zoom)) * 0.3);
+    const pitch = Math.min(0.3, Math.max(-1.5, zoomTilt + orbit.pitch));
+    orbit.pitch = pitch - zoomTilt; // so a drag past the limit does not have to be undone first
     const target = Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height);
-    camera.lookAt(target, new Cesium.HeadingPitchRange(camHeading, pitch, CHASE_RANGE * zoom));
+    camera.lookAt(target, new Cesium.HeadingPitchRange(camHeading + orbit.heading, pitch, CHASE_RANGE * zoom));
   }
 
   // ------------------------------------------------------------ HUD

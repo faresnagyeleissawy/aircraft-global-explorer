@@ -33,12 +33,12 @@
       </form>
       <div id="nav">
         <form id="route-form">
-          <label for="route-from">Route from</label>
-          <input id="route-from" type="search" autocomplete="off" placeholder="Where I am now" />
+          <label for="route-from">Trip from</label>
+          <input id="route-from" type="search" autocomplete="off" placeholder="Airport code (DXB) or where I am now" />
           <label for="route-to">to</label>
-          <input id="route-to" type="search" autocomplete="off" placeholder="Destination" />
+          <input id="route-to" type="search" autocomplete="off" placeholder="Airport code (LHR) or place" />
           <div class="row">
-            <button type="submit">Show route</button>
+            <button type="submit">Start trip</button>
             <button type="button" id="route-clear">Clear</button>
           </div>
         </form>
@@ -48,6 +48,15 @@
       <div id="plane-tools">
         <button id="fly-burj" title="Fly to Burj Khalifa (B)">Fly to Burj Khalifa (B)</button>
       </div>
+      <label>
+        View (V)
+        <select id="view-select">
+          <option value="chase">Behind the plane</option>
+          <option value="inside">Pilot's seat</option>
+          <option value="left">Left window seat</option>
+          <option value="right">Right window seat</option>
+        </select>
+      </label>
       <label class="check">
         <input type="checkbox" id="flights-toggle" checked />
         <span>Live flights <span id="flights-note"></span></span>
@@ -77,6 +86,29 @@
 
     <div id="hud-message" hidden></div>
 
+    <div id="window-frame" hidden><div></div></div>
+
+    <div id="trip-bar" hidden>
+      <div class="row">
+        <strong id="trip-title"></strong>
+        <span id="trip-text"></span>
+      </div>
+      <progress id="trip-progress" max="1" value="0"></progress>
+      <div class="row">
+        <button type="button" id="trip-autopilot" title="Autopilot (A)"></button>
+        <label>
+          Speed
+          <select id="trip-speed">
+            <option value="1">Real time</option>
+            <option value="5">×5</option>
+            <option value="20">×20</option>
+            <option value="60">×60</option>
+          </select>
+        </label>
+        <button type="button" id="trip-end">End trip</button>
+      </div>
+    </div>
+
     <div id="pick-bar" hidden>
       <span id="pick-text"></span>
       <button type="button" id="pick-go">Start flying</button>
@@ -95,14 +127,20 @@
         <tr><td>Click</td><td>Show the name and address of that building or spot</td></tr>
         <tr><td>Double-click</td><td>Fly to that spot on the map</td></tr>
       </table>
-      <p>V switches between chase and inside view. R goes back to the start point. B flies to Burj Khalifa. H hides this.</p>
-      <p>Search takes you to any place in the world. "Route" draws the road between two places. The address you are flying over is shown under the speed. Yellow planes are real flights; click one to see which.</p>
+      <p>V changes the view: behind the plane, pilot's seat, left or right window seat. R goes back to the start point. B flies to Burj Khalifa. H hides this.</p>
+      <p>On a trip the autopilot flies for you. Touch an arrow key to take over and press A to hand back. The Speed menu makes a long flight pass faster.</p>
+      <p>Search takes you to any place in the world. "Trip" flies from one airport or place to another. The address you are flying over is shown under the speed. Yellow planes are real flights; click one to see which.</p>
     </div>
 
     <div id="start-dialog" class="dialog" hidden>
       <form id="start-form">
         <h2>Where do you want to fly?</h2>
-        <p>Choose a start point in one of three ways, then press Start flying.</p>
+        <p>Fly a trip as a passenger: type two airport codes (or places) and press Start flying.</p>
+        <div class="row">
+          <input id="start-from" type="search" autocomplete="off" placeholder="From, e.g. DXB" aria-label="Trip from" />
+          <input id="start-to" type="search" autocomplete="off" placeholder="To, e.g. LHR" aria-label="Trip to" />
+        </div>
+        <p>Or fly freely from a start point of your choice:</p>
         <label>
           Search for a place
           <input id="start-search" type="search" autocomplete="off" placeholder="City, landmark or address" />

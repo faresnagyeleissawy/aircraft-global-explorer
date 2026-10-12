@@ -6,6 +6,15 @@ import { createFlights } from "./flights.js";
 import { labelBuildings } from "./labels.js";
 import { attachSuggest } from "./suggest.js";
 import {
+  CRUISE_SPEED,
+  createTrip,
+  findAirport,
+  formatDuration,
+  nearestFlown,
+  suggestAirports,
+  tripState,
+} from "./trip.js";
+import {
   BURJ_KHALIFA,
   bearing,
   createRoute,
@@ -37,6 +46,8 @@ const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 40;
 const RESPAWN_DELAY = 2.5;
 const ARRIVE_DISTANCE = 300;
+const AIRPORTS_URL = "data/airports.json";
+const VIEWS = ["chase", "inside", "left", "right"]; // behind the plane, pilot's seat, window seats
 const MAP_HEIGHT = 2500000; // camera height, in meters, when a trip is picked on the map
 const MAX_ROUTE_LENGTH = 300000; // longer lines are too heavy to drape on the ground
 const REANCHOR_DISTANCE = 15000;
@@ -227,7 +238,11 @@ function createGame(viewer, dataMode, world) {
   const HPR = Cesium.HeadingPitchRoll;
   const scratchCarto = new Cesium.Cartographic();
 
-  let view = "chase"; // "chase" or "inside" (the pilot's seat)
+  let view = "chase"; // one of VIEWS
+  let airports = []; // rows of data/airports.json, once loaded
+  let trip = null; // the flight being flown from one place to another, see trip.js
+  let autopilot = false; // true while the trip flies itself
+  let timeScale = 1; // how much faster than real time the autopilot flies
   let place = PLACES.find((p) => p.id === storageGet(PLACE_KEY)) || PLACES[0];
   let state = createState(0, 0, 0, 0);
   let zoom = 1; // mouse wheel: multiplies the chase camera distance
@@ -319,9 +334,16 @@ function createGame(viewer, dataMode, world) {
     return Array.isArray(rows) ? rows[0] : undefined;
   }
 
+  fetch(AIRPORTS_URL)
+    .then((res) => res.json())
+    .then((rows) => (airports = rows))
+    .catch(() => console.warn("Airport codes could not be loaded; places can still be searched by name."));
+
   async function findAddress(text) {
     const coords = parseLatLon(text);
     if (coords) return { ...coords, name: text.trim() };
+    const airport = findAirport(airports, text);
+    if (airport) return airport;
     const known = PLACES.find((p) => p.name.toLowerCase() === text.trim().toLowerCase());
     if (known) return { lon: known.lon, lat: known.lat, name: known.name };
     const missing = new Error('No place found for "' + text.trim() + '".');
@@ -346,7 +368,12 @@ function createGame(viewer, dataMode, world) {
   }
 
   // Places matching what has been typed so far, for the list under a search box.
+  // Airports come first, so a code such as DXB is one keystroke from its airport.
   async function suggestPlaces(text) {
+    return [...suggestAirports(airports, text), ...(await suggestOther(text))];
+  }
+
+  async function suggestOther(text) {
     if (googleGeocoder) {
       const results = await googleGeocoder.geocode(text, Cesium.GeocodeType.AUTOCOMPLETE);
       return results.filter((r) => r.destination).slice(0, 6).map(fromGoogle);
@@ -459,8 +486,104 @@ function createGame(viewer, dataMode, world) {
     for (const e of routeEntities) viewer.entities.remove(e);
     routeEntities = [];
     route = null;
+    trip = null;
+    autopilot = false;
+    updateTripBar();
     refreshExclude();
   }
+
+  // ------------------------------------------------------------ trips
+
+  const shortName = (p) => p.code || (p.name ? p.name.split(",")[0] : "Start");
+
+  // Starts a flight from one place to another along the line a real flight
+  // takes, on autopilot: the traveller watches, or takes over with the arrows.
+  async function startTrip(from, to) {
+    const length = distance(from, to);
+    if (length < 2000) throw new Error("Those two places are too close together for a flight.");
+    const line = greatCircle(from, to, Math.max(2, Math.min(400, Math.ceil(length / 5000))));
+    const [startGround, endGround] = await Promise.all([terrainHeight(from.lon, from.lat), terrainHeight(to.lon, to.lat)]);
+    showRoute(line);
+    trip = createTrip(line, startGround, endGround, from, to);
+    const start = tripState(trip, 0);
+    placeAt(start.lon, start.lat, start.heading, startGround, start.height - startGround);
+    autopilot = true;
+    updateTripBar();
+    return "Trip " + shortName(from) + " → " + shortName(to) + ": " + formatDistance(length);
+  }
+
+  // Moves the plane along the trip. Returns false when the trip has just ended.
+  function flyTrip(dt) {
+    trip.flown = Math.min(trip.length, trip.flown + CRUISE_SPEED * timeScale * dt);
+    const at = tripState(trip, trip.flown);
+    state.lon = toRad(at.lon);
+    state.lat = toRad(at.lat);
+    state.heading = at.heading;
+    state.height = at.height;
+    state.pitch = at.pitch;
+    state.roll = 0;
+    state.speed = CRUISE_SPEED;
+    return trip.flown < trip.length;
+  }
+
+  function setAutopilot(on) {
+    if (!trip || on === autopilot) return;
+    autopilot = on;
+    if (on) {
+      // Rejoin the line at the point nearest to where the plane is now.
+      trip.flown = nearestFlown(trip, here());
+      trip.arrived = false;
+      state.crashed = false;
+      crashTimer = 0;
+    } else {
+      // Hand over in level flight at a speed the plane can keep.
+      state.pitch = 0;
+      state.speed = 150;
+      state.throttle = 0.7;
+      flash("You have the controls. Press A for the autopilot.", 4);
+    }
+    updateTripBar();
+  }
+
+  function updateTripBar() {
+    $("trip-bar").hidden = !trip;
+    if (!trip) return;
+    const left = trip.arrived ? 0 : autopilot ? trip.length - trip.flown : distance(here(), trip.to);
+    const done = Math.max(0, Math.min(1, 1 - left / trip.length));
+    $("trip-title").textContent = shortName(trip.from) + " → " + shortName(trip.to);
+    $("trip-progress").value = done;
+    $("trip-text").textContent =
+      trip.arrived
+        ? "Arrived"
+        : Math.round(done * 100) + "% · " + formatDistance(left) + " left · " + formatDuration(left / CRUISE_SPEED) + " of flying";
+    $("trip-autopilot").textContent = autopilot ? "Autopilot: on" : "Autopilot: off";
+    $("trip-autopilot").classList.toggle("active", autopilot);
+  }
+
+  $("trip-autopilot").addEventListener("click", (e) => {
+    setAutopilot(!autopilot);
+    e.currentTarget.blur();
+  });
+  $("trip-speed").addEventListener("change", (e) => {
+    timeScale = Number(e.target.value) || 1;
+    e.target.blur();
+  });
+  $("trip-end").addEventListener("click", (e) => {
+    clearRoute();
+    $("nav-status").textContent = "";
+    e.currentTarget.blur();
+  });
+
+  function setView(next) {
+    view = next;
+    orbit = { heading: 0, pitch: 0 };
+    $("view-select").value = view;
+    $("window-frame").hidden = view !== "left" && view !== "right";
+  }
+  $("view-select").addEventListener("change", (e) => {
+    setView(e.target.value);
+    e.target.blur();
+  });
 
   // Pins a label to a spot on the map for a few seconds.
   function showInfo(spot, text) {
@@ -499,7 +622,7 @@ function createGame(viewer, dataMode, world) {
   // searched for again.
   const picked = new Map();
   const suggest = {};
-  for (const id of ["search-input", "route-from", "route-to", "start-search"]) {
+  for (const id of ["search-input", "route-from", "route-to", "start-search", "start-from", "start-to"]) {
     suggest[id] = attachSuggest($(id), suggestPlaces, (place) => {
       picked.set(id, place);
       if (id === "search-input") $("search-form").requestSubmit();
@@ -549,7 +672,9 @@ function createGame(viewer, dataMode, world) {
     if (!toText.trim()) return;
     runNav(async () => {
       const to = await resolvePlace("route-to");
-      const from = fromText.trim() ? await resolvePlace("route-from") : here();
+      const from = fromText.trim() ? await resolvePlace("route-from") : { ...here(), name: "Here" };
+      // Between airports it is a flight; between other places, the road.
+      if (from.airport || to.airport) return startTrip(from, to);
       const points = await fetchRoute(from, to);
       showRoute(points);
       // With a typed start you are taken there, heading along the route.
@@ -647,12 +772,9 @@ function createGame(viewer, dataMode, world) {
     scene.screenSpaceCameraController.enableInputs = false;
     updatePickBar();
     if (fly && a && b) {
-      const length = distance(a, b);
-      const line = greatCircle(a, b, Math.max(2, Math.min(400, Math.ceil(length / 5000))));
-      showRoute(line);
-      travelTo(a.lon, a.lat, bearing(line[0], line[1]));
-      $("nav-status").classList.remove("error");
-      $("nav-status").textContent = "Follow the yellow line: " + formatDistance(length) + " to your destination";
+      runNav(() => startTrip({ ...a, name: "Start" }, { ...b, name: "Destination" })).then(() => {
+        if (!placed) openStart(); // the two points were too close together
+      });
     } else if (!placed) {
       openStart();
     }
@@ -688,7 +810,13 @@ function createGame(viewer, dataMode, world) {
     button.disabled = true;
     $("start-error").hidden = true;
     try {
-      if ($("start-x").value.trim() || $("start-y").value.trim()) {
+      if ($("start-from").value.trim() || $("start-to").value.trim()) {
+        if (!$("start-from").value.trim() || !$("start-to").value.trim()) {
+          throw new Error("A trip needs both a From and a To, for example DXB and LHR.");
+        }
+        const from = await resolvePlace("start-from");
+        $("nav-status").textContent = await startTrip(from, await resolvePlace("start-to"));
+      } else if ($("start-x").value.trim() || $("start-y").value.trim()) {
         const spot = parseXY($("start-x").value, $("start-y").value);
         if (!spot) throw new Error(BAD_XY);
         await travelTo(spot.lon, spot.lat, 0);
@@ -781,7 +909,6 @@ function createGame(viewer, dataMode, world) {
     orbit.pitch -= (e.clientY - drag.y) * 0.005;
     drag.x = e.clientX;
     drag.y = e.clientY;
-    view = "chase";
   });
   window.addEventListener("pointerup", () => {
     drag = null;
@@ -798,7 +925,7 @@ function createGame(viewer, dataMode, world) {
       if (picking) return; // the map handles its own zoom
       e.preventDefault();
       zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * Math.exp(e.deltaY * 0.0015)));
-      view = "chase";
+      if (view !== "chase") setView("chase");
     },
     { passive: false }
   );
@@ -863,7 +990,8 @@ function createGame(viewer, dataMode, world) {
 
   function onAction(code) {
     if (!placed || picking) return; // still choosing where to fly
-    if (code === "KeyV") view = view === "chase" ? "inside" : "chase";
+    if (code === "KeyV") setView(VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length]);
+    else if (code === "KeyA") setAutopilot(!autopilot);
     else if (code === "KeyR") spawn();
     else if (code === "KeyH") toggleHelp();
     else if (code === "KeyB") flyToBurjKhalifa();
@@ -890,7 +1018,10 @@ function createGame(viewer, dataMode, world) {
 
   // Sends the plane to a point anywhere in the world (degrees).
   async function travelTo(lon, lat, heading) {
-    placeAt(lon, lat, heading, await terrainHeight(lon, lat));
+    const ground = await terrainHeight(lon, lat);
+    autopilot = false; // going somewhere else leaves the trip's line
+    placeAt(lon, lat, heading, ground);
+    updateTripBar();
   }
 
   // Midday sun wherever the player is, so buildings are lit from above.
@@ -922,6 +1053,7 @@ function createGame(viewer, dataMode, world) {
   // Starts a flight 3 km south-west of Burj Khalifa, aimed just to the right
   // of the tower so it stays in view as you pass it.
   function flyToBurjKhalifa() {
+    autopilot = false;
     const start = offset(toRad(BURJ_KHALIFA.lon), toRad(BURJ_KHALIFA.lat), 3000, toRad(225));
     placeAt(toDeg(start.lon), toDeg(start.lat), toRad(52), DUBAI_GROUND, 530);
     flash("Burj Khalifa ahead", 4);
@@ -958,10 +1090,22 @@ function createGame(viewer, dataMode, world) {
         state.throttle = 0.4;
         showMessage("");
       }
+    } else if (trip && autopilot) {
+      if (input.up || input.down || input.left || input.right) {
+        setAutopilot(false);
+      } else if (!flyTrip(dt)) {
+        autopilot = false;
+        trip.arrived = true;
+        state.pitch = 0;
+        state.speed = 150;
+        state.throttle = 0.7;
+        flash("You have arrived at " + shortName(trip.to) + ". You have the controls.", 6);
+      }
     } else {
       updatePlane(state, input, dt, sampleGround);
       if (state.crashed) showMessage("Crashed! Respawning…");
     }
+    if (trip) updateTripBar();
 
     lastGround = sampleGround(state.lon, state.lat);
     updateCamera(dt);
@@ -976,11 +1120,19 @@ function createGame(viewer, dataMode, world) {
   }
 
   function updateCamera(dt) {
-    if (view === "inside") {
+    if (view !== "chase") {
+      // From a seat: straight ahead for the pilot, out to the side and a
+      // little down for a window. Dragging the mouse looks around from there.
+      const side = view === "left" ? -Math.PI / 2 : view === "right" ? Math.PI / 2 : 0;
+      orbit.pitch = Math.min(0.6, Math.max(-1.4, orbit.pitch));
       camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
       camera.setView({
         destination: Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height + 1.2),
-        orientation: { heading: state.heading, pitch: state.pitch, roll: state.roll },
+        orientation: {
+          heading: state.heading + side + orbit.heading,
+          pitch: (side ? -0.2 : state.pitch) + orbit.pitch,
+          roll: side ? 0 : state.roll,
+        },
       });
       return;
     }
@@ -1015,6 +1167,11 @@ function createGame(viewer, dataMode, world) {
   }
 
   function updateTarget() {
+    if (trip) {
+      // The trip bar shows how far there is to go.
+      $("hud-target").textContent = "";
+      return;
+    }
     if (!route) {
       // Over Dubai, point to the tower instead.
       const toTower = distance(here(), BURJ_KHALIFA);
@@ -1038,7 +1195,7 @@ function createGame(viewer, dataMode, world) {
 
   function updateHud(ground) {
     const kmh = Math.round(Math.abs(state.speed) * 3.6);
-    $("hud-speed").textContent = kmh + " km/h";
+    $("hud-speed").textContent = kmh + " km/h" + (trip && autopilot && timeScale > 1 ? " ×" + timeScale : "");
     const agl = ground !== undefined ? Math.max(0, Math.round(state.height - ground)) : null;
     $("hud-alt").textContent = agl !== null ? agl + " m above ground" : "—";
     $("hud-throttle").textContent = "Throttle " + Math.round(state.throttle * 100) + "%";

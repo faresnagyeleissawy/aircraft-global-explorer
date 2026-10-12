@@ -24,6 +24,7 @@ body {
 #hud,
 #help,
 #pick-bar,
+#trip-bar,
 #hud-message {
   position: absolute;
   background: var(--panel-bg);
@@ -238,6 +239,83 @@ button.link {
 
 .dialog .row {
   gap: 8px;
+}
+
+#trip-bar {
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(520px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#trip-bar .row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#trip-bar #trip-text {
+  flex: 1;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+#trip-bar progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--accent);
+}
+
+#trip-bar label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#trip-bar button {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #39414d;
+  background: #0d1015;
+  color: var(--panel-text);
+  cursor: pointer;
+}
+
+#trip-bar button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #111;
+  font-weight: 600;
+}
+
+/* A window seat: the cabin wall with an aircraft window cut out of it. */
+#window-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#window-frame div {
+  width: min(52vmin, 60vw);
+  height: 72vmin;
+  border-radius: 45% / 32%;
+  border: 14px solid #d5d8dc;
+  box-shadow:
+    0 0 0 100vmax #23272e,
+    inset 0 0 24px rgba(0, 0, 0, 0.55);
 }
 
 #pick-bar {

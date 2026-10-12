@@ -39,8 +39,8 @@ Press 1, 2 or 3 (or C to cycle) to switch mode. V switches between the chase and
 
 Use the **Buildings** menu to choose the data:
 
-- **Photorealistic** uses Google Photorealistic 3D Tiles through Cesium ion. The free plan allows 1,000 sessions a month, and each page load uses one.
-- **Simple** uses Cesium OSM Buildings on Cesium World Terrain with Bing imagery.
+- **3D buildings** (the default) uses Cesium OSM Buildings on Cesium World Terrain with Bing imagery. Every building in Dubai is a 3D block with its real height.
+- **Satellite photo** uses Google Photorealistic 3D Tiles through Cesium ion. Google has no 3D mesh for Dubai, so the city is a photo on flat ground with no buildings to drive between. The free plan allows 1,000 sessions a month, and each page load uses one.
 
 The Cesium ion Community plan is free for personal and non-commercial use. Commercial use needs a paid plan.
 
@@ -54,7 +54,6 @@ The Cesium ion Community plan is free for personal and non-commercial use. Comme
 
 ## Known limits
 
-- Up close, Google's photorealistic mesh can look soft or melted, and trees or parked cars in the mesh count as obstacles.
 - Driving under a bridge is treated as hitting a wall, because heights are sampled from above.
 - The start points are approximate. In walk or car mode you may land on a rooftop. You can walk off it, or press 3 to fly.
 

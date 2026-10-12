@@ -84,8 +84,10 @@ async function boot() {
 }
 
 async function startGame() {
-  const dataMode = OFFLINE ? "none" : storageGet(DATA_KEY) || "google";
-  $("data-select").value = dataMode === "none" ? "google" : dataMode;
+  // OSM Buildings is the default: Google's photorealistic tiles have no 3D mesh
+  // for Dubai, only satellite photos on flat ground.
+  const dataMode = OFFLINE ? "none" : storageGet(DATA_KEY) || "osm";
+  $("data-select").value = dataMode === "none" ? "osm" : dataMode;
 
   const viewerOptions = {
     animation: false,

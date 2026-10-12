@@ -40,7 +40,6 @@ Press 1, 2 or 3 (or C to cycle) to switch mode. V switches between the chase and
 Use the **Buildings** menu to choose the data:
 
 - **3D buildings** (the default) uses Cesium OSM Buildings on Cesium World Terrain with Bing imagery. Every building in Dubai is a 3D block with its real height.
-- **My 3D model** loads a 3D Tiles asset from your own Cesium ion account on top of the terrain and starts you beside it. The asset number is `ION_ASSET_ID` at the top of `src/main.js`. It only loads for tokens whose account has that asset.
 - **Satellite photo** uses Google Photorealistic 3D Tiles through Cesium ion. Google has no 3D mesh for Dubai, so the city is a photo on flat ground with no buildings to drive between. The free plan allows 1,000 sessions a month, and each page load uses one.
 
 The Cesium ion Community plan is free for personal and non-commercial use. Commercial use needs a paid plan.

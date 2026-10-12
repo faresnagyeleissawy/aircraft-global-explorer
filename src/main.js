@@ -20,6 +20,9 @@ const RESPAWN_DELAY = 2.5;
 const ARRIVE_DISTANCE = 25;
 // Public OSRM demo server: free, no key, best effort.
 const ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
+// OpenStreetMap's Nominatim geocoder: free, no key, at most one search a second.
+const GEOCODE_URL = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=en";
+const DUBAI_BOX = "54.85,25.40,55.65,24.75"; // west, north, east, south
 
 const $ = (id) => document.getElementById(id);
 
@@ -216,31 +219,44 @@ function createGame(viewer, dataMode) {
   const toRad = Cesium.Math.toRadians;
   const here = () => ({ lon: toDeg(state.lon), lat: toDeg(state.lat) });
 
-  // Google's terms need Google geocoding on top of the photorealistic tiles.
-  const geocoder = OFFLINE
-    ? null
-    : new Cesium.IonGeocoderService({
-        scene,
-        geocodeProviderType:
-          dataMode === "google" ? Cesium.IonGeocodeProviderType.GOOGLE : Cesium.IonGeocodeProviderType.DEFAULT,
-      });
+  // Addresses come from OpenStreetMap, except on Google's photorealistic
+  // tiles, whose terms only allow Google's own geocoder on top of them.
+  const googleGeocoder =
+    dataMode === "google"
+      ? new Cesium.IonGeocoderService({ scene, geocodeProviderType: Cesium.IonGeocodeProviderType.GOOGLE })
+      : null;
+
+  async function nominatim(text, area) {
+    let rows;
+    try {
+      const res = await fetch(GEOCODE_URL + area + "&q=" + encodeURIComponent(text.trim()));
+      rows = await res.json();
+    } catch {
+      throw new Error("The address search did not answer. Try again in a moment.");
+    }
+    return Array.isArray(rows) ? rows[0] : undefined;
+  }
 
   async function findAddress(text) {
     const coords = parseLatLon(text);
     if (coords) return { ...coords, name: text.trim() };
-    if (!geocoder) {
-      // Offline there is no geocoder, so only the built-in places and "lat, lon" work.
-      const known = PLACES.find((p) => p.name.toLowerCase().includes(text.trim().toLowerCase()));
-      if (!known) throw new Error('Offline mode only knows the "Start at" places and "lat, lon".');
-      return { lon: known.lon, lat: known.lat, name: known.name };
+    const known = PLACES.find((p) => p.name.toLowerCase() === text.trim().toLowerCase());
+    if (known) return { lon: known.lon, lat: known.lat, name: known.name };
+    const missing = new Error('No place found for "' + text.trim() + '".');
+    if (googleGeocoder) {
+      const query = /dubai|uae|emirates/i.test(text) ? text : text + ", Dubai";
+      const results = await googleGeocoder.geocode(query);
+      if (!results.length) throw missing;
+      const dest = results[0].destination;
+      const carto =
+        dest instanceof Cesium.Rectangle ? Cesium.Rectangle.center(dest) : Cesium.Cartographic.fromCartesian(dest);
+      return { lon: toDeg(carto.longitude), lat: toDeg(carto.latitude), name: results[0].displayName };
     }
-    const query = /dubai|uae|emirates/i.test(text) ? text : text + ", Dubai";
-    const results = await geocoder.geocode(query);
-    if (!results.length) throw new Error('No place found for "' + text.trim() + '".');
-    const dest = results[0].destination;
-    const carto =
-      dest instanceof Cesium.Rectangle ? Cesium.Rectangle.center(dest) : Cesium.Cartographic.fromCartesian(dest);
-    return { lon: toDeg(carto.longitude), lat: toDeg(carto.latitude), name: results[0].displayName };
+    // Look inside Dubai first, then anywhere in the UAE.
+    const row =
+      (await nominatim(text, "&bounded=1&viewbox=" + DUBAI_BOX)) || (await nominatim(text, "&countrycodes=ae"));
+    if (!row) throw missing;
+    return { lon: Number(row.lon), lat: Number(row.lat), name: row.display_name.split(",").slice(0, 2).join(",") };
   }
 
   async function fetchRoute(from, to) {
@@ -403,6 +419,15 @@ function createGame(viewer, dataMode) {
       canvas.requestPointerLock();
     }
   });
+  // Cesium's own handlers try to capture the pointer on every press, which
+  // browsers refuse (with a console error) while the mouse is locked.
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (document.pointerLockElement === canvas) e.stopPropagation();
+    },
+    true
+  );
   document.addEventListener("mousemove", (e) => {
     if (document.pointerLockElement !== canvas || mode !== "walk") return;
     state.heading += e.movementX * 0.0025;

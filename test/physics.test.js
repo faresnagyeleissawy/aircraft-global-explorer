@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createState, updateWalk, updateCar, updatePlane, offset } from "../src/physics.js";
+import { createState, updateCar, updateDrone, updatePlane, offset } from "../src/physics.js";
 
 const rad = (d) => (d * Math.PI) / 180;
 const LON = rad(55.27);
@@ -17,26 +17,41 @@ function run(updater, s, input, seconds, ground) {
   for (let t = 0; t < seconds; t += dt) updater(s, input, dt, ground);
 }
 
-test("walking forward moves north and stays on the ground", () => {
-  const s = createState(LON, LAT, 0, 0);
-  run(updateWalk, s, { ...noKeys, up: true }, 2, flat);
-  assert.ok(s.lat > LAT, "moved north");
-  assert.equal(s.height, 0);
-});
-
-test("walking into a building is blocked", () => {
-  const s = createState(LON, LAT, 0, 0);
-  run(updateWalk, s, { ...noKeys, up: true, boost: true }, 10, groundWithWall);
-  assert.ok(s.lat < wallLat, "did not pass through the wall");
-  assert.equal(s.blocked, true);
-});
-
-test("walking off a ledge falls under gravity", () => {
+test("a car in the air falls to the ground", () => {
   const s = createState(LON, LAT, 10, 0);
-  updateWalk(s, noKeys, 0.1, flat);
+  updateCar(s, noKeys, 0.1, flat);
   assert.ok(s.height < 10 && s.height > 0, "falling");
-  run(updateWalk, s, noKeys, 3, flat);
+  run(updateCar, s, noKeys, 3, flat);
   assert.equal(s.height, 0);
+});
+
+test("drone flies forward with the up arrow and climbs with Shift held", () => {
+  const s = createState(LON, LAT, 30, 0);
+  run(updateDrone, s, { ...noKeys, up: true }, 2, flat);
+  assert.ok(s.lat > LAT, "moved north");
+  assert.equal(s.height, 30);
+  const lat = s.lat;
+  run(updateDrone, s, noKeys, 3, flat); // coast to a stop
+  run(updateDrone, s, { ...noKeys, up: true, boost: true }, 2, flat);
+  assert.ok(s.height > 40, "climbed");
+  assert.ok(Math.abs(s.lat - lat) < 1e-6, "did not move forward while climbing");
+});
+
+test("drone stops at a tall building but flies over it from above", () => {
+  const low = createState(LON, LAT, 10, 0);
+  run(updateDrone, low, { ...noKeys, up: true }, 10, groundWithWall);
+  assert.ok(low.lat < wallLat, "did not pass through the wall");
+  assert.equal(low.blocked, true);
+
+  const high = createState(LON, LAT, 50, 0);
+  run(updateDrone, high, { ...noKeys, up: true }, 10, groundWithWall);
+  assert.ok(high.lat > wallLat, "flew over the roof");
+});
+
+test("drone never sinks into the ground", () => {
+  const s = createState(LON, LAT, 5, 0);
+  run(updateDrone, s, { ...noKeys, down: true, boost: true }, 5, flat);
+  assert.equal(s.height, 2);
 });
 
 test("car accelerates, is speed limited, and bounces off walls", () => {

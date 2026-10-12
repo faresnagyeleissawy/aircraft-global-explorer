@@ -1,4 +1,4 @@
-import { createState, updaters, offset, WALK } from "./physics.js";
+import { createState, updaters, offset } from "./physics.js";
 import { PLACES } from "./places.js";
 import { createInput } from "./input.js";
 import { createFacade } from "./facade.js";
@@ -14,9 +14,18 @@ const PLACE_KEY = "dubai3d.place";
 const params = new URLSearchParams(window.location.search);
 const OFFLINE = params.has("offline");
 
-const MODES = ["walk", "car", "plane"];
-const MODE_LABELS = { walk: "Walk", car: "Car", plane: "Plane" };
+const MODES = ["car", "drone", "plane"];
+const MODE_LABELS = { car: "Car", drone: "Drone", plane: "Plane" };
 const PLANE_SPAWN_HEIGHT = 350;
+const DRONE_SPAWN_HEIGHT = 60;
+// Chase camera: distance behind each vehicle and how far down it looks (radians).
+const CHASE = {
+  car: { range: 14, pitch: -0.22, lift: 1.5 },
+  drone: { range: 9, pitch: -0.35, lift: 0 },
+  plane: { range: 45, pitch: -0.18, lift: 0 },
+};
+const MIN_ZOOM = 0.4;
+const MAX_ZOOM = 40;
 const RESPAWN_DELAY = 2.5;
 const ARRIVE_DISTANCE = 25;
 const MAX_ROUTE_LENGTH = 300000; // longer lines are too heavy to drape on the ground
@@ -183,7 +192,8 @@ function createGame(viewer, dataMode, world) {
   let view = "chase"; // "chase" or "inside" for car and plane
   let place = PLACES.find((p) => p.id === storageGet(PLACE_KEY)) || PLACES[0];
   let state = createState(0, 0, 0, 0);
-  let pendingDrop = false; // waiting for ground data before landing in walk/car mode
+  let pendingDrop = false; // waiting for ground data before landing in car mode
+  let zoom = 1; // mouse wheel: multiplies the chase camera distance
   let crashTimer = 0;
   let camHeading = 0;
   let lastTime = performance.now();
@@ -225,7 +235,19 @@ function createGame(viewer, dataMode, world) {
     model: { uri: "models/Cesium_Air.glb", scale: 1.5 },
     show: false,
   });
-  const exclude = [car, plane];
+  const drone = viewer.entities.add({
+    position,
+    orientation: orientationFor(0),
+    box: {
+      dimensions: new Cesium.Cartesian3(1.4, 1.4, 0.3),
+      material: Cesium.Color.fromCssColorString("#20252c"),
+      outline: true,
+      outlineColor: Cesium.Color.fromCssColorString("#f0b429"),
+    },
+    show: false,
+  });
+  const models = { car, drone, plane };
+  const exclude = [car, drone, plane];
 
   // Height of whatever is rendered under (lon, lat): buildings, mesh or terrain.
   function sampleGround(lon, lat) {
@@ -242,12 +264,12 @@ function createGame(viewer, dataMode, world) {
     return h;
   }
 
-  // On foot or wheels, treat missing data as flat ground at the current height
-  // so the player is never frozen by a tile that has not loaded yet.
+  // On wheels, treat missing data as flat ground at the current height so the
+  // car is never frozen by a tile that has not loaded yet.
   function groundForMode(lon, lat) {
     const h = sampleGround(lon, lat);
     if (h !== undefined) return h;
-    return mode === "plane" ? undefined : state.height;
+    return mode === "car" ? state.height : undefined;
   }
 
   // ------------------------------------------------------------ search and routes
@@ -452,26 +474,29 @@ function createGame(viewer, dataMode, world) {
     e.currentTarget.blur();
   });
 
-  // Mouse look while walking (click the map to capture the mouse, Esc to release).
+  // Mouse: the wheel zooms the chase camera, a double-click goes to that spot.
   const canvas = scene.canvas;
-  canvas.addEventListener("click", () => {
-    if (mode === "walk" && document.pointerLockElement !== canvas && canvas.requestPointerLock) {
-      canvas.requestPointerLock();
-    }
-  });
-  // Cesium's own handlers try to capture the pointer on every press, which
-  // browsers refuse (with a console error) while the mouse is locked.
-  document.addEventListener(
-    "pointerdown",
+  canvas.addEventListener(
+    "wheel",
     (e) => {
-      if (document.pointerLockElement === canvas) e.stopPropagation();
+      e.preventDefault();
+      zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * Math.exp(e.deltaY * 0.0015)));
+      view = "chase";
     },
-    true
+    { passive: false }
   );
-  document.addEventListener("mousemove", (e) => {
-    if (document.pointerLockElement !== canvas || mode !== "walk") return;
-    state.heading += e.movementX * 0.0025;
-    state.lookPitch = Math.max(-1.2, Math.min(1.2, state.lookPitch - e.movementY * 0.0025));
+  // Cesium's own double-click would lock the camera onto the clicked vehicle.
+  viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+  canvas.addEventListener("dblclick", (e) => {
+    const box = canvas.getBoundingClientRect();
+    const point = new Cesium.Cartesian2(e.clientX - box.left, e.clientY - box.top);
+    const ray = camera.getPickRay(point);
+    let spot = scene.pickPositionSupported ? scene.pickPosition(point) : undefined;
+    if (!Cesium.defined(spot) && ray && scene.globe.show) spot = scene.globe.pick(ray, scene);
+    if (!Cesium.defined(spot)) return;
+    const there = Cesium.Cartographic.fromCartesian(spot);
+    if (!there) return;
+    travelTo(toDeg(there.longitude), toDeg(there.latitude), state.heading);
   });
 
   function toggleHelp() {
@@ -479,8 +504,8 @@ function createGame(viewer, dataMode, world) {
   }
 
   function onAction(code) {
-    if (code === "Digit1") setMode("walk");
-    else if (code === "Digit2") setMode("car");
+    if (code === "Digit1") setMode("car");
+    else if (code === "Digit2") setMode("drone");
     else if (code === "Digit3") setMode("plane");
     else if (code === "KeyC") setMode(MODES[(MODES.indexOf(mode) + 1) % MODES.length]);
     else if (code === "KeyV") view = view === "chase" ? "inside" : "chase";
@@ -527,22 +552,18 @@ function createGame(viewer, dataMode, world) {
     if (world.facade) world.facade.setAnchor(lon, lat, ground);
   }
 
-  // Puts the player `lift` meters above ground level at a point (degrees). On
-  // foot or wheels they then drop to the ground.
-  function placeAt(lon, lat, heading, ground, lift = PLANE_SPAWN_HEIGHT) {
+  // Puts the player `lift` meters above ground level at a point (degrees). A
+  // car then drops to the ground.
+  function placeAt(lon, lat, heading, ground, lift = mode === "drone" ? DRONE_SPAWN_HEIGHT : PLANE_SPAWN_HEIGHT) {
     state = createState(toRad(lon), toRad(lat), ground + lift, heading);
     setAnchor(lon, lat, ground);
     placed = true;
     camHeading = heading;
     crashTimer = 0;
     lastGround = undefined;
-    if (mode === "plane") {
-      state.speed = 70;
-      pendingDrop = false;
-    } else {
-      pendingDrop = true;
-    }
-    showMessage(mode === "plane" ? "" : "Loading the ground…");
+    if (mode === "plane") state.speed = 70;
+    pendingDrop = mode === "car";
+    showMessage(pendingDrop ? "Loading the ground…" : "");
   }
 
   // Starts a flight 3 km south-west of Burj Khalifa, aimed just to the right
@@ -558,8 +579,6 @@ function createGame(viewer, dataMode, world) {
     if (next === mode) return;
     const prev = mode;
     mode = next;
-    if (document.pointerLockElement && next !== "walk") document.exitPointerLock();
-
     state.speed = 0;
     state.vz = 0;
     state.roll = 0;
@@ -573,7 +592,12 @@ function createGame(viewer, dataMode, world) {
       state.speed = 70;
       state.throttle = 0.4;
       showMessage("");
-    } else if (prev === "plane" || pendingDrop) {
+    } else if (next === "drone") {
+      // Lift off from the road; coming from the plane, hover where you are.
+      if (prev === "car") state.height += 30;
+      pendingDrop = false;
+      showMessage("");
+    } else {
       const g = sampleGround(state.lon, state.lat);
       if (g !== undefined) {
         state.height = g;
@@ -589,9 +613,10 @@ function createGame(viewer, dataMode, world) {
   }
 
   function updateModeButtons() {
-    for (const m of MODES) $("mode-" + m).classList.toggle("active", m === mode);
-    car.show = mode === "car" && view === "chase";
-    plane.show = mode === "plane" && view === "chase";
+    for (const m of MODES) {
+      $("mode-" + m).classList.toggle("active", m === mode);
+      models[m].show = m === mode && view === "chase";
+    }
     $("hud-mode").textContent = MODE_LABELS[mode];
     $("plane-tools").hidden = mode !== "plane";
   }
@@ -648,8 +673,7 @@ function createGame(viewer, dataMode, world) {
     lastGround = sampleGround(state.lon, state.lat);
     updateCamera(dt);
     updateHud(lastGround);
-    car.show = mode === "car" && view === "chase";
-    plane.show = mode === "plane" && view === "chase";
+    for (const m of MODES) models[m].show = m === mode && view === "chase";
   }
 
   function hoverCamera() {
@@ -661,21 +685,17 @@ function createGame(viewer, dataMode, world) {
   }
 
   function updateCamera(dt) {
-    if (mode === "walk") {
-      camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
-      camera.setView({
-        destination: Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height + WALK.eyeHeight),
-        orientation: { heading: state.heading, pitch: state.lookPitch, roll: 0 },
-      });
-      return;
-    }
-
     if (view === "inside") {
-      const eye = mode === "car" ? 2.2 : 1.2;
+      const eye = mode === "car" ? 2.2 : mode === "plane" ? 1.2 : 0;
       camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
       camera.setView({
         destination: Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height + eye),
-        orientation: { heading: state.heading, pitch: state.pitch, roll: mode === "plane" ? state.roll : 0 },
+        // The drone's camera looks a little down, like a real one.
+        orientation: {
+          heading: state.heading,
+          pitch: mode === "drone" ? -0.3 : state.pitch,
+          roll: mode === "plane" ? state.roll : 0,
+        },
       });
       return;
     }
@@ -685,11 +705,11 @@ function createGame(viewer, dataMode, world) {
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     camHeading += diff * Math.min(1, dt * (mode === "car" ? 4 : 2.5));
 
-    const range = mode === "car" ? 14 : 45;
-    const pitch = mode === "car" ? -0.22 : -0.18;
-    const lift = mode === "car" ? 1.5 : 0;
-    const target = Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height + lift);
-    camera.lookAt(target, new Cesium.HeadingPitchRange(camHeading, pitch, range));
+    // Zooming out also tilts the camera down, towards a map-like view from above.
+    const chase = CHASE[mode];
+    const pitch = Math.max(-1.3, chase.pitch - Math.max(0, Math.log(zoom)) * 0.3);
+    const target = Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height + chase.lift);
+    camera.lookAt(target, new Cesium.HeadingPitchRange(camHeading, pitch, chase.range * zoom));
   }
 
   // ------------------------------------------------------------ HUD
@@ -734,7 +754,7 @@ function createGame(viewer, dataMode, world) {
     const kmh = Math.round(Math.abs(state.speed) * 3.6);
     $("hud-speed").textContent = kmh + " km/h";
     const agl = ground !== undefined ? Math.max(0, Math.round(state.height - ground)) : null;
-    $("hud-alt").textContent = mode === "plane" ? (agl !== null ? agl + " m above ground" : "—") : "";
+    $("hud-alt").textContent = mode === "car" ? "" : agl !== null ? agl + " m above ground" : "—";
     $("hud-throttle").textContent = mode === "plane" ? "Throttle " + Math.round(state.throttle * 100) + "%" : "";
     const deg = Math.round(Cesium.Math.toDegrees(state.heading) + 360) % 360;
     $("hud-heading").textContent = deg + "° " + compass(deg);

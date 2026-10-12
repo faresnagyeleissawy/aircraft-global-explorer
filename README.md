@@ -1,6 +1,6 @@
 # World 3D Explorer
 
-A browser game for exploring the real world in 3D. Search for any place, then walk, drive or fly there, steering with the arrow keys. It started as a Dubai explorer, which is why the repository is called `dubai-3d-explorer` and Dubai is where you start. It is built on [CesiumJS](https://cesium.com/platform/cesiumjs/) (open source, Apache 2.0) and uses map data from a free [Cesium ion](https://ion.cesium.com) account.
+A browser game for exploring the real world in 3D. Search for any place, then drive a car, hover a drone or fly a plane there, steering with the arrow keys. It started as a Dubai explorer, which is why the repository is called `dubai-3d-explorer` and Dubai is where you start. It is built on [CesiumJS](https://cesium.com/platform/cesiumjs/) (open source, Apache 2.0) and uses map data from a free [Cesium ion](https://ion.cesium.com) account.
 
 ## Run it
 
@@ -18,16 +18,16 @@ Go to **Settings → Pages** in the repository and choose "Deploy from a branch"
 
 ## Controls
 
-| Key | Walk | Car | Plane |
+| Key | Car | Drone | Plane |
 | --- | --- | --- | --- |
-| ↑ / ↓ | Forward / back | Accelerate / brake, then reverse | Climb / dive |
-| ← / → | Turn | Steer | Bank and turn |
-| Shift | Run | Boost | More throttle |
-| W / S | | | Throttle up / down |
-| Space | | Handbrake | |
-| Mouse | Click the map to look around, Esc to release | | |
+| ↑ / ↓ | Accelerate / brake, then reverse | Forward / back | Climb / dive |
+| ← / → | Steer | Turn | Bank and turn |
+| Shift | Boost | With ↑ / ↓: up / down | More throttle |
+| Space | Handbrake | | |
+| Mouse wheel | Zoom in and out | | |
+| Double-click | Go to that spot on the map | | |
 
-Press 1, 2 or 3 (or C to cycle) to switch mode. V switches between the chase and inside views, R takes you back to the start point, B flies to Burj Khalifa, and H shows or hides the controls.
+The arrow keys and Shift are all you need. W and S also work for drone height and plane throttle. Press 1, 2 or 3 (or C to cycle) to switch between car, drone and plane. V switches between the chase and inside views, R takes you back to the start point, B flies to Burj Khalifa, and H shows or hides the controls. Zooming a long way out tilts the camera down to a map-like view.
 
 ## Search, routes and Burj Khalifa
 
@@ -47,7 +47,7 @@ The Cesium ion Community plan is free for personal and non-commercial use. Comme
 
 ## How it works
 
-- `src/physics.js` holds the movement models for walking, driving and flying. It is plain JavaScript with no Cesium code, and it is unit tested.
+- `src/physics.js` holds the movement models for the car, the drone and the plane. It is plain JavaScript with no Cesium code, and it is unit tested.
 - `src/facade.js` is a shader that draws windows, glass and roofs on the plain OSM Buildings blocks, so the city looks built rather than like white boxes. The pattern is generated, not photographed, so it does not match each real building.
 - `src/route.js` holds the distance, bearing and route-progress helpers. It is also plain JavaScript and unit tested.
 - Addresses are looked up with OpenStreetMap's [Nominatim](https://nominatim.org) geocoder, which is free and needs no key but allows at most one search a second. On Google's tiles the Google geocoder from Cesium ion is used instead, as Google's terms require. Routes come from the public [OSRM](https://project-osrm.org) demo server, which is free and needs no key but is best effort and meant for light use.
@@ -57,7 +57,7 @@ The Cesium ion Community plan is free for personal and non-commercial use. Comme
 ## Known limits
 
 - Driving under a bridge is treated as hitting a wall, because heights are sampled from above.
-- The famous places are approximate. In walk or car mode you may land on a rooftop. You can walk off it, or press 3 to fly.
+- The famous places are approximate. In car mode you may land on a rooftop. You can drive off it, or press 2 or 3 to fly.
 
 ## Development
 

@@ -1,4 +1,5 @@
-// Keyboard state. Arrow keys steer in every mode; other keys trigger actions.
+// Keyboard state. Arrow keys (with Shift) are all a vehicle needs; W and S
+// are extra keys for plane throttle and drone height. Other keys trigger actions.
 const KEY_MAP = {
   ArrowUp: "up",
   ArrowDown: "down",

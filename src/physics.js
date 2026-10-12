@@ -1,4 +1,4 @@
-// Movement models for the three modes. Pure functions with no Cesium imports,
+// Movement models for the three modes (car, drone, plane). Pure functions with no Cesium imports,
 // so they can be unit tested in Node with a fake ground function.
 //
 // Angles are radians. heading: 0 = north, clockwise. lon/lat: radians.
@@ -7,15 +7,6 @@
 
 const EARTH_RADIUS = 6378137;
 const GRAVITY = 9.81;
-
-export const WALK = {
-  eyeHeight: 1.7,
-  walkSpeed: 1.6,
-  runSpeed: 6,
-  turnRate: 1.8,
-  maxStep: 0.6,
-  lookAhead: 0.4,
-};
 
 export const CAR = {
   accel: 5,
@@ -28,6 +19,14 @@ export const CAR = {
   steerRate: 0.9,
   maxStep: 1.2,
   lookAhead: 2.5,
+};
+
+export const DRONE = {
+  speed: 15,
+  climbRate: 8,
+  turnRate: 1.4,
+  clearance: 2,
+  maxStep: 3, // rises over anything lower than this, stops at anything higher
 };
 
 export const PLANE = {
@@ -64,7 +63,6 @@ export function createState(lon, lat, height, heading = 0) {
     heading,
     pitch: 0, // body pitch (car slope, aircraft nose)
     roll: 0,
-    lookPitch: 0, // walk mode camera pitch, driven by the mouse
     speed: 0,
     vz: 0,
     throttle: 0.4,
@@ -74,7 +72,7 @@ export function createState(lon, lat, height, heading = 0) {
   };
 }
 
-// Keeps feet on the surface: steps up instantly (smoothed), falls under gravity.
+// Keeps wheels on the surface: steps up instantly (smoothed), falls under gravity.
 function settle(s, groundHere, dt) {
   if (groundHere === undefined) return;
   if (s.height <= groundHere + 0.01) {
@@ -93,29 +91,6 @@ function settle(s, groundHere, dt) {
       s.grounded = false;
     }
   }
-}
-
-export function updateWalk(s, input, dt, ground) {
-  const turn = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-  s.heading = wrapAngle(s.heading + turn * WALK.turnRate * dt);
-
-  const dir = (input.up ? 1 : 0) - (input.down ? 1 : 0);
-  s.speed = dir * (input.boost ? WALK.runSpeed : WALK.walkSpeed);
-  s.blocked = false;
-
-  if (s.speed !== 0) {
-    const next = offset(s.lon, s.lat, s.speed * dt, s.heading);
-    const probe = offset(next.lon, next.lat, Math.sign(s.speed) * WALK.lookAhead, s.heading);
-    const groundAhead = ground(probe.lon, probe.lat);
-    if (groundAhead !== undefined && groundAhead - s.height > WALK.maxStep) {
-      s.blocked = true;
-      s.speed = 0;
-    } else if (groundAhead !== undefined || ground(s.lon, s.lat) !== undefined) {
-      s.lon = next.lon;
-      s.lat = next.lat;
-    }
-  }
-  settle(s, ground(s.lon, s.lat), dt);
 }
 
 export function updateCar(s, input, dt, ground) {
@@ -197,4 +172,34 @@ export function updatePlane(s, input, dt, ground) {
   }
 }
 
-export const updaters = { walk: updateWalk, car: updateCar, plane: updatePlane };
+// Hovers: up/down arrows fly forward and back, left/right turn. Holding Shift
+// turns up/down into climb and descend, so the arrow keys are all it needs.
+export function updateDrone(s, input, dt, ground) {
+  const turn = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  s.heading = wrapAngle(s.heading + turn * DRONE.turnRate * dt);
+
+  const arrows = (input.up ? 1 : 0) - (input.down ? 1 : 0);
+  const forward = input.boost ? 0 : arrows;
+  const lift = (input.boost ? arrows : 0) + (input.throttleUp ? 1 : 0) - (input.throttleDown ? 1 : 0);
+  s.speed += (forward * DRONE.speed - s.speed) * Math.min(1, dt * 3);
+  s.height += clamp(lift, -1, 1) * DRONE.climbRate * dt;
+  s.roll = turn * 0.15;
+  s.pitch = 0;
+
+  s.blocked = false;
+  if (Math.abs(s.speed) > 0.01) {
+    const next = offset(s.lon, s.lat, s.speed * dt, s.heading);
+    const groundAhead = ground(next.lon, next.lat);
+    if (groundAhead !== undefined && groundAhead + DRONE.clearance - s.height > DRONE.maxStep) {
+      s.blocked = true;
+      s.speed = 0;
+    } else {
+      s.lon = next.lon;
+      s.lat = next.lat;
+    }
+  }
+  const g = ground(s.lon, s.lat);
+  if (g !== undefined) s.height = Math.max(s.height, g + DRONE.clearance);
+}
+
+export const updaters = { car: updateCar, drone: updateDrone, plane: updatePlane };

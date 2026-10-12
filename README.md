@@ -32,7 +32,10 @@ The arrow keys and Shift are all you need. W and S also work for throttle up and
 ## Search, routes and Burj Khalifa
 
 - **Search** moves you to any address or place in the world. While you type, a list of matching places appears; pick one with the mouse or the arrow keys and Enter. You can also type coordinates as `lat, lon`.
+- **Start screen**: the game opens by asking where to fly. Search for a place, type X (longitude) and Y (latitude), or pick a famous place, then press Start flying. "New start" in the panel brings the screen back.
+- **Coordinates** in the panel takes you to an X (longitude) and Y (latitude).
 - **Famous places** is a short list of cities and landmarks to jump to.
+- **Address as you go**: the display shows the nearest address or named place under the plane, refreshed every few seconds.
 - **Route from / to** draws the road route between two places as a yellow line and shows the distance left. Leave "from" empty to start where you are. With a typed start you are taken there, heading along the route. Routes longer than 300 km are refused.
 - **Building labels**: buildings that have a name or address in OpenStreetMap show it as a label when you are within 300 m. Click any building or spot to see its name and address; if the building has none of its own, the address of that point is looked up.
 - Near Dubai the display shows the direction and distance to Burj Khalifa. **Fly to Burj Khalifa** (or B) starts a flight 3 km away with the tower straight ahead, and so does starting a flight from Downtown.
@@ -52,7 +55,7 @@ The Cesium ion Community plan is free for personal and non-commercial use. Comme
 - `src/facade.js` is a shader that draws windows, glass and roofs on the plain OSM Buildings blocks, so the city looks built rather than like white boxes. The pattern is generated, not photographed, so it does not match each real building.
 - `src/route.js` holds the distance, bearing and route-progress helpers. It is also plain JavaScript and unit tested.
 - `src/suggest.js` is the list of places under the search boxes and `src/labels.js` puts the name and address labels on buildings.
-- Addresses are looked up with OpenStreetMap's [Nominatim](https://nominatim.org) geocoder, which is free and needs no key but allows at most one search a second. The list shown while you type comes from [Photon](https://photon.komoot.io), another free OpenStreetMap geocoder that allows search-as-you-type. On Google's tiles the Google geocoder from Cesium ion is used instead, as Google's terms require. Routes come from the public [OSRM](https://project-osrm.org) demo server, which is free and needs no key but is best effort and meant for light use.
+- Addresses are looked up with OpenStreetMap's [Nominatim](https://nominatim.org) geocoder, which is free and needs no key but allows at most one search a second. The list shown while you type and the address under the plane come from [Photon](https://photon.komoot.io), another free OpenStreetMap geocoder that allows search-as-you-type. On Google's tiles the Google geocoder from Cesium ion is used instead, as Google's terms require. Routes come from the public [OSRM](https://project-osrm.org) demo server, which is free and needs no key but is best effort and meant for light use.
 - `src/main.js` turns off Cesium's mouse navigation, runs the game loop and moves the camera every frame. It finds the height of whatever is under the plane (terrain or a rooftop) with `scene.sampleHeight`; the plane crashes when it drops below that surface, and starts again in the air above it.
 
 ## Known limits

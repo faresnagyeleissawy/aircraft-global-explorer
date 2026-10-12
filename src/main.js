@@ -11,6 +11,7 @@ import {
   distance,
   formatDistance,
   parseLatLon,
+  parseXY,
   placeName,
   remaining,
   shortAddress,
@@ -45,7 +46,11 @@ const REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&z
 // Photon, another free OpenStreetMap geocoder, is built for search-as-you-type
 // (Nominatim's rules do not allow that use).
 const SUGGEST_URL = "https://photon.komoot.io/api/?limit=6&lang=en";
+const AROUND_URL = "https://photon.komoot.io/reverse?lang=en";
 const INFO_SECONDS = 12;
+const ADDRESS_EVERY = 4000; // ms between lookups of the address under the plane
+const ADDRESS_STEP = 100; // meters the plane must move before the address is looked up again
+const BAD_XY = "X must be a longitude from -180 to 180 and Y a latitude from -90 to 90.";
 // Street level in Dubai, in meters above the ellipsoid (sea level is about -32 m there).
 const DUBAI_GROUND = -28;
 
@@ -232,6 +237,9 @@ function createGame(viewer, dataMode, world) {
   let flashText = "";
   let flashUntil = 0;
   let reanchoring = false;
+  let addressAt = null; // where the address under the plane was last looked up
+  let addressTime = 0;
+  let addressBusy = false;
   let placed = false; // false until the first start point has been reached
   let anchor = { lon: 0, lat: 0, ground: 0 }; // where the sun and the building shader were last set up
 
@@ -355,6 +363,32 @@ function createGame(viewer, dataMode, world) {
     }
   }
 
+  // Nearest named place or address to a point in degrees, or "".
+  async function placeAround(lon, lat) {
+    try {
+      const res = await fetch(AROUND_URL + "&lon=" + lon.toFixed(5) + "&lat=" + lat.toFixed(5));
+      const data = await res.json();
+      return data.features && data.features.length ? placeName(data.features[0].properties) : "";
+    } catch {
+      return "";
+    }
+  }
+
+  // Keeps the "Over: ..." line of the display up to date as the plane moves.
+  // Not on Google's tiles, whose terms rule out other geocoders.
+  function updateAddress(now) {
+    if (googleGeocoder || addressBusy || now - addressTime < ADDRESS_EVERY) return;
+    const spot = here();
+    if (addressAt && distance(spot, addressAt) < ADDRESS_STEP) return;
+    addressBusy = true;
+    addressTime = now;
+    addressAt = spot;
+    placeAround(spot.lon, spot.lat).then((text) => {
+      $("hud-address").textContent = text ? "Over: " + text : "";
+      addressBusy = false;
+    });
+  }
+
   async function fetchRoute(from, to) {
     const pair = [from, to].map((p) => p.lon.toFixed(6) + "," + p.lat.toFixed(6)).join(";");
     let data;
@@ -457,7 +491,7 @@ function createGame(viewer, dataMode, world) {
   // searched for again.
   const picked = new Map();
   const suggest = {};
-  for (const id of ["search-input", "route-from", "route-to"]) {
+  for (const id of ["search-input", "route-from", "route-to", "start-search"]) {
     suggest[id] = attachSuggest($(id), suggestPlaces, (place) => {
       picked.set(id, place);
       if (id === "search-input") $("search-form").requestSubmit();
@@ -516,6 +550,16 @@ function createGame(viewer, dataMode, world) {
     });
   });
 
+  $("xy-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    runNav(async () => {
+      const spot = parseXY($("xy-x").value, $("xy-y").value);
+      if (!spot) throw new Error(BAD_XY);
+      await travelTo(spot.lon, spot.lat, state.heading);
+      return "Moved to X " + spot.lon + ", Y " + spot.lat;
+    });
+  });
+
   $("route-clear").addEventListener("click", (e) => {
     clearRoute();
     $("nav-status").textContent = "";
@@ -527,20 +571,68 @@ function createGame(viewer, dataMode, world) {
     e.currentTarget.blur();
   });
 
+  // ------------------------------------------------------------ start screen
+
+  // The game waits on this screen until a start point is chosen: a searched
+  // place, typed X / Y coordinates, or one of the famous places.
+  function openStart() {
+    $("start-error").hidden = true;
+    $("start-place").value = place.id;
+    $("start-dialog").hidden = false;
+    $("start-search").focus();
+  }
+
+  $("start-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const button = $("start-form").querySelector("button");
+    button.disabled = true;
+    $("start-error").hidden = true;
+    try {
+      if ($("start-x").value.trim() || $("start-y").value.trim()) {
+        const spot = parseXY($("start-x").value, $("start-y").value);
+        if (!spot) throw new Error(BAD_XY);
+        await travelTo(spot.lon, spot.lat, 0);
+      } else if ($("start-search").value.trim()) {
+        const found = await resolvePlace("start-search");
+        await travelTo(found.lon, found.lat, 0);
+      } else {
+        choosePlace($("start-place").value);
+      }
+      $("start-dialog").hidden = true;
+      if (document.activeElement) document.activeElement.blur();
+    } catch (err) {
+      $("start-error").textContent = err && err.message ? err.message : String(err);
+      $("start-error").hidden = false;
+    }
+    button.disabled = false;
+  });
+
+  $("choose-start").addEventListener("click", (e) => {
+    openStart();
+    e.currentTarget.blur();
+  });
+
   // ------------------------------------------------------------ UI wiring
 
   const placeSelect = $("place-select");
-  for (const p of PLACES) {
-    const opt = document.createElement("option");
-    opt.value = p.id;
-    opt.textContent = p.name;
-    placeSelect.appendChild(opt);
+  for (const select of [placeSelect, $("start-place")]) {
+    for (const p of PLACES) {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.name;
+      select.appendChild(opt);
+    }
   }
   placeSelect.value = place.id;
-  placeSelect.addEventListener("change", () => {
-    place = PLACES.find((p) => p.id === placeSelect.value) || PLACES[0];
+
+  function choosePlace(id) {
+    place = PLACES.find((p) => p.id === id) || PLACES[0];
+    placeSelect.value = place.id;
     storageSet(PLACE_KEY, place.id);
     spawn();
+  }
+  placeSelect.addEventListener("change", () => {
+    choosePlace(placeSelect.value);
     placeSelect.blur();
   });
 
@@ -614,6 +706,7 @@ function createGame(viewer, dataMode, world) {
   }
 
   function onAction(code) {
+    if (!placed) return; // still on the start screen
     if (code === "KeyV") view = view === "chase" ? "inside" : "chase";
     else if (code === "KeyR") spawn();
     else if (code === "KeyH") toggleHelp();
@@ -717,6 +810,7 @@ function createGame(viewer, dataMode, world) {
     lastGround = sampleGround(state.lon, state.lat);
     updateCamera(dt);
     updateHud(lastGround);
+    updateAddress(now);
     plane.show = view === "chase";
   }
 
@@ -796,7 +890,7 @@ function createGame(viewer, dataMode, world) {
 
   return {
     start() {
-      spawn();
+      openStart();
       scene.postRender.addEventListener(tick);
       // Exposed for automated tests and debugging.
       window.game = {

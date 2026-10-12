@@ -34,6 +34,15 @@ export function parseLatLon(text) {
   return { lat, lon };
 }
 
+// Separate X (longitude) and Y (latitude) boxes.
+export function parseXY(x, y) {
+  if (!String(x).trim() || !String(y).trim()) return null;
+  const lon = Number(x);
+  const lat = Number(y);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lon) > 180 || Math.abs(lat) > 90) return null;
+  return { lon, lat };
+}
+
 // Wraps a list of points with the running distance to the end of the line.
 export function createRoute(points) {
   const toEnd = new Array(points.length).fill(0);

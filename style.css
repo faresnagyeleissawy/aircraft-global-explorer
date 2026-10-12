@@ -71,7 +71,8 @@ input {
 
 #nav,
 #nav form,
-#search-form {
+#search-form,
+#xy-form {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -82,12 +83,16 @@ input {
 }
 
 #search-form .row,
+#xy-form .row,
+.dialog .row,
 #nav .row {
   display: flex;
   gap: 6px;
 }
 
 #search-form .row input,
+#xy-form .row input,
+.dialog .row input,
 #nav .row input {
   flex: 1;
   min-width: 0;
@@ -95,6 +100,7 @@ input {
 
 #nav button,
 #search-form button,
+#xy-form button,
 #plane-tools button {
   padding: 6px 10px;
   border-radius: 6px;
@@ -133,7 +139,7 @@ input {
 
 .suggest {
   position: fixed;
-  z-index: 5;
+  z-index: 20; /* above the dialogs */
   margin: 0;
   padding: 4px;
   list-style: none;
@@ -194,6 +200,32 @@ button.link {
   color: var(--accent);
 }
 
+#hud {
+  max-width: 280px;
+}
+
+#hud-address {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+#hud-address:empty {
+  display: none;
+}
+
+.dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dialog .row {
+  gap: 8px;
+}
+
 #hud-message {
   top: 40%;
   left: 50%;
@@ -235,7 +267,7 @@ button.link {
   font-size: 13px;
 }
 
-#token-dialog {
+.dialog {
   position: absolute;
   inset: 0;
   z-index: 10;
@@ -245,12 +277,12 @@ button.link {
   background: rgba(0, 0, 0, 0.7);
 }
 
-#token-dialog[hidden],
+.dialog[hidden],
 [hidden] {
   display: none !important;
 }
 
-#token-form {
+.dialog form {
   background: #181d24;
   border-radius: 12px;
   padding: 22px;
@@ -261,26 +293,26 @@ button.link {
   gap: 12px;
 }
 
-#token-form h2 {
+.dialog form h2 {
   margin: 0;
   font-size: 18px;
 }
 
-#token-form p {
+.dialog form p {
   margin: 0;
   color: var(--muted);
   line-height: 1.45;
 }
 
-#token-form a {
+.dialog form a {
   color: var(--accent);
 }
 
-#token-form .error {
+.dialog form .error {
   color: #ff8a80;
 }
 
-#token-form button {
+.dialog form button {
   padding: 10px;
   border-radius: 8px;
   border: none;

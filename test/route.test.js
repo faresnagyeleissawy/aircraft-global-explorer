@@ -4,6 +4,7 @@ import {
   distance,
   bearing,
   parseLatLon,
+  parseXY,
   createRoute,
   remaining,
   formatDistance,
@@ -28,6 +29,14 @@ test("parseLatLon reads coordinates and rejects addresses", () => {
   assert.deepEqual(parseLatLon(" 25.1 55.2 "), { lat: 25.1, lon: 55.2 });
   assert.equal(parseLatLon("Dubai Mall"), null);
   assert.equal(parseLatLon("125, 55"), null);
+});
+
+test("parseXY reads longitude and latitude boxes", () => {
+  assert.deepEqual(parseXY("55.2744", " 25.1972 "), { lon: 55.2744, lat: 25.1972 });
+  assert.equal(parseXY("55.2744", ""), null);
+  assert.equal(parseXY("abc", "25"), null);
+  assert.equal(parseXY("190", "25"), null);
+  assert.equal(parseXY("55", "95"), null);
 });
 
 test("remaining distance shrinks as you follow the route", () => {

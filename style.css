@@ -480,15 +480,201 @@ button.link {
   cursor: pointer;
 }
 
-@media (max-width: 640px) {
+/* ------------------------------------------------------------ menu button */
+
+#menu-toggle {
+  position: absolute;
+  z-index: 4;
+  top: 12px;
+  left: 12px;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: none;
+  background: var(--panel-bg);
+  color: var(--panel-text);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+#panel {
+  top: 62px;
+  z-index: 4;
+  max-height: calc(100dvh - 74px);
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+body.menu-closed #panel {
+  display: none;
+}
+
+.dialog form {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+
+.suggest {
+  max-width: min(360px, calc(100vw - 24px));
+}
+
+/* ------------------------------------------------------------ touch controls */
+
+#touch {
+  display: none;
+}
+
+#touch button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: var(--panel-bg);
+  color: var(--panel-text);
+  font-size: 15px;
+  font-weight: 600;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#touch button.held {
+  background: var(--accent);
+  color: #111;
+}
+
+#touch .pad,
+#touch .side {
+  position: absolute;
+  z-index: 2;
+  bottom: 30px;
+}
+
+#touch .pad {
+  left: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, 54px);
+  grid-template-rows: repeat(3, 54px);
+  gap: 4px;
+}
+
+#touch .pad button {
+  font-size: 20px;
+}
+
+#touch .up {
+  grid-area: 1 / 2;
+}
+
+#touch .left {
+  grid-area: 2 / 1;
+}
+
+#touch .right {
+  grid-area: 2 / 3;
+}
+
+#touch .down {
+  grid-area: 3 / 2;
+}
+
+#touch .side {
+  right: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, 62px);
+  gap: 4px;
+}
+
+#touch .side button {
+  height: 44px;
+}
+
+#touch .side button:last-child {
+  grid-column: 1 / 3;
+}
+
+/* Phones, tablets and narrow windows: buttons to fly with, and room for them. */
+@media (pointer: coarse), (max-width: 760px) {
+  #touch {
+    display: block;
+  }
+
+  #trip-bar {
+    bottom: 216px;
+    width: calc(100vw - 24px);
+    box-sizing: border-box;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  #hud-message {
+    top: 30%;
+    max-width: calc(100vw - 48px);
+    font-size: 16px;
+    text-align: center;
+  }
+}
+
+/* Narrow screens: the menu becomes a sheet and everything else shrinks. */
+@media (max-width: 760px) {
   #panel {
-    width: calc(100vw - 48px);
+    left: 12px;
+    right: 12px;
+    width: auto;
+    background: rgba(18, 22, 28, 0.96); /* it lies over the display, so it must hide it */
   }
+
   #hud {
-    top: auto;
-    bottom: 40px;
+    top: 12px;
+    right: 12px;
+    min-width: 0;
+    max-width: calc(100vw - 84px);
+    padding: 8px 10px;
+    font-size: 12px;
   }
+
+  #hud-speed {
+    font-size: 18px;
+  }
+
+  #hud-address {
+    margin-top: 3px;
+    font-size: 11px;
+  }
+
   #help {
-    display: none;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 5;
+    max-width: none;
+    max-height: 70dvh;
+    overflow-y: auto;
+  }
+
+  #pick-bar {
+    top: 62px;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    min-width: 0;
+    max-width: none;
+    flex-wrap: wrap;
+  }
+
+  #pick-bar span {
+    flex-basis: 100%;
+  }
+
+  #demo-caption {
+    top: 62px;
+    width: calc(100vw - 56px);
+    max-width: none;
+    padding: 8px 12px;
+    font-size: 16px;
+  }
+
+  #window-frame div {
+    width: 74vw;
+    height: 56dvh;
   }
 }

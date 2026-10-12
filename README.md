@@ -36,6 +36,8 @@ Go to **Settings → Pages** in the repository and choose "Deploy from a branch"
 | Click | Show the name and address of that building or spot |
 | Double-click | Fly to that spot on the map |
 
+On a phone or tablet the game shows its own buttons: an arrow pad to steer, Faster for more throttle, View, Auto for the autopilot, and ＋ / － to zoom. The ☰ button opens and closes the menu, which starts closed on a small screen. Dragging a finger looks around and a double tap flies to that spot.
+
 The arrow keys and Shift are all you need. W and S also work for throttle up and down. V changes the view, A turns the autopilot on and off during a trip, R takes you back to the start point, B flies to Burj Khalifa, and H shows or hides the controls. Zooming a long way out tilts the camera down to a map-like view.
 
 ## Search, routes and Burj Khalifa

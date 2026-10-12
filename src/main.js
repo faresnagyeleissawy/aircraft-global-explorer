@@ -841,6 +841,43 @@ function createGame(viewer, dataMode, world) {
     e.currentTarget.blur();
   });
 
+  // ------------------------------------------------------------ menu and touch controls
+
+  // The panel can be folded away. On a narrow screen it starts folded, and
+  // folds again whenever the plane is sent somewhere, to show the view.
+  const narrow = window.matchMedia("(max-width: 760px)");
+  function setMenu(open) {
+    document.body.classList.toggle("menu-closed", !open);
+    $("menu-toggle").setAttribute("aria-expanded", String(open));
+  }
+  setMenu(!narrow.matches);
+  $("menu-toggle").addEventListener("click", (e) => {
+    setMenu(document.body.classList.contains("menu-closed"));
+    e.currentTarget.blur();
+  });
+
+  // On-screen buttons stand in for the keyboard: held ones for the arrow keys
+  // and Shift, tapped ones for the other keys and for the zoom.
+  for (const button of $("touch").querySelectorAll("button")) {
+    const { key, action, zoom: factor } = button.dataset;
+    button.addEventListener("contextmenu", (e) => e.preventDefault()); // a long press is not a right-click
+    if (key) {
+      const hold = (down) => (e) => {
+        e.preventDefault();
+        input[key] = down;
+        button.classList.toggle("held", down);
+      };
+      button.addEventListener("pointerdown", hold(true));
+      for (const end of ["pointerup", "pointercancel", "pointerleave"]) button.addEventListener(end, hold(false));
+    } else {
+      button.addEventListener("click", () => {
+        if (action) onAction(action);
+        else zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * Number(factor)));
+        if (factor && view !== "chase") setView("chase");
+      });
+    }
+  }
+
   // ------------------------------------------------------------ demo tour
 
   // A scripted tour of the main features with captions, made to be recorded
@@ -960,6 +997,7 @@ function createGame(viewer, dataMode, world) {
   function startPicking() {
     $("start-dialog").hidden = true;
     picking = { points: [], marks: [] };
+    if (narrow.matches) setMenu(false);
     plane.show = false;
     showMessage("");
     const centre = placed ? here() : place;
@@ -1292,6 +1330,7 @@ function createGame(viewer, dataMode, world) {
   // Puts the plane in the air, `lift` meters above ground level at a point (degrees).
   function placeAt(lon, lat, heading, ground, lift = PLANE_SPAWN_HEIGHT) {
     state = createState(toRad(lon), toRad(lat), ground + lift, heading);
+    if (narrow.matches) setMenu(false);
     setAnchor(lon, lat, ground);
     placed = true;
     camHeading = heading;

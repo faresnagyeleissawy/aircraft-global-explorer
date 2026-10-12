@@ -22,6 +22,8 @@ const ARRIVE_DISTANCE = 25;
 const ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
 // OpenStreetMap's Nominatim geocoder: free, no key, at most one search a second.
 const GEOCODE_URL = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=en";
+// A 3D Tiles asset in the player's own Cesium ion account ("My 3D model" in the menu).
+const ION_ASSET_ID = 3667783;
 const DUBAI_BOX = "54.85,25.40,55.65,24.75"; // west, north, east, south
 
 const $ = (id) => document.getElementById(id);
@@ -104,13 +106,14 @@ async function startGame() {
     infoBox: false,
     selectionIndicator: false,
   };
-  if (dataMode === "osm") {
+  if (dataMode === "osm" || dataMode === "ion") {
     viewerOptions.terrain = Cesium.Terrain.fromWorldTerrain();
   } else {
     viewerOptions.baseLayer = false;
   }
 
   const viewer = new Cesium.Viewer("cesiumContainer", viewerOptions);
+  let modelPlace = null;
   const scene = viewer.scene;
   const camera = viewer.camera;
   window.viewer = viewer; // handy in the browser console
@@ -145,6 +148,27 @@ async function startGame() {
     viewer.terrainShadows = Cesium.ShadowMode.RECEIVE_ONLY;
     viewer.shadowMap.maximumDistance = 1500;
     viewer.shadowMap.darkness = 0.45;
+  } else if (dataMode === "ion") {
+    let tileset;
+    try {
+      tileset = await Cesium.Cesium3DTileset.fromIonAssetId(ION_ASSET_ID);
+    } catch (err) {
+      // Go back to the default so the next start is not stuck on a model this token cannot open.
+      storageSet(DATA_KEY, null);
+      throw new Error("3D model " + ION_ASSET_ID + " is not available to this token: " + (err && err.message ? err.message : err));
+    }
+    scene.primitives.add(tileset);
+    scene.globe.depthTestAgainstTerrain = true;
+    // Start next to the model, wherever in the world it is.
+    const center = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
+    modelPlace = {
+      id: "ion-model",
+      name: "My 3D model",
+      lon: Cesium.Math.toDegrees(center.longitude),
+      lat: Cesium.Math.toDegrees(center.latitude),
+      heading: 0,
+      base: Math.max(0, center.height),
+    };
   } else {
     scene.globe.baseColor = Cesium.Color.fromCssColorString("#c9b98f");
   }
@@ -153,13 +177,13 @@ async function startGame() {
     console.warn("sampleHeight is not supported by this browser; ground following will be approximate.");
   }
 
-  const game = createGame(viewer, dataMode);
+  const game = createGame(viewer, dataMode, modelPlace);
   game.start();
 }
 
 // ---------------------------------------------------------------- game
 
-function createGame(viewer, dataMode) {
+function createGame(viewer, dataMode, modelPlace) {
   const scene = viewer.scene;
   const camera = viewer.camera;
   const HPR = Cesium.HeadingPitchRoll;
@@ -167,7 +191,8 @@ function createGame(viewer, dataMode) {
 
   let mode = "plane";
   let view = "chase"; // "chase" or "inside" for car and plane
-  let place = PLACES.find((p) => p.id === storageGet(PLACE_KEY)) || PLACES[0];
+  const places = modelPlace ? [modelPlace, ...PLACES] : PLACES;
+  let place = modelPlace || places.find((p) => p.id === storageGet(PLACE_KEY)) || places[0];
   let state = createState(0, 0, 0, 0);
   let pendingDrop = false; // waiting for ground data before landing in walk/car mode
   let crashTimer = 0;
@@ -256,7 +281,7 @@ function createGame(viewer, dataMode) {
   async function findAddress(text) {
     const coords = parseLatLon(text);
     if (coords) return { ...coords, name: text.trim() };
-    const known = PLACES.find((p) => p.name.toLowerCase() === text.trim().toLowerCase());
+    const known = places.find((p) => p.name.toLowerCase() === text.trim().toLowerCase());
     if (known) return { lon: known.lon, lat: known.lat, name: known.name };
     const missing = new Error('No place found for "' + text.trim() + '".');
     if (googleGeocoder) {
@@ -398,7 +423,7 @@ function createGame(viewer, dataMode) {
   // ------------------------------------------------------------ UI wiring
 
   const placeSelect = $("place-select");
-  for (const p of PLACES) {
+  for (const p of places) {
     const opt = document.createElement("option");
     opt.value = p.id;
     opt.textContent = p.name;
@@ -406,7 +431,7 @@ function createGame(viewer, dataMode) {
   }
   placeSelect.value = place.id;
   placeSelect.addEventListener("change", () => {
-    place = PLACES.find((p) => p.id === placeSelect.value) || PLACES[0];
+    place = places.find((p) => p.id === placeSelect.value) || places[0];
     storageSet(PLACE_KEY, place.id);
     spawn();
     placeSelect.blur();
@@ -470,7 +495,7 @@ function createGame(viewer, dataMode) {
   function spawn() {
     // Flying from Downtown starts with the tower in front of you.
     if (mode === "plane" && place.id === "downtown") flyToBurjKhalifa();
-    else placeAt(place.lon, place.lat, toRad(place.heading));
+    else placeAt(place.lon, place.lat, toRad(place.heading), (place.base || 0) + PLANE_SPAWN_HEIGHT);
   }
 
   // Puts the player above a point (degrees). On foot or wheels they then drop to the ground.
@@ -588,7 +613,7 @@ function createGame(viewer, dataMode) {
   function hoverCamera() {
     camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
     camera.setView({
-      destination: Cesium.Cartesian3.fromRadians(state.lon, state.lat, PLANE_SPAWN_HEIGHT),
+      destination: Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height),
       orientation: { heading: state.heading, pitch: Cesium.Math.toRadians(-89), roll: 0 },
     });
   }

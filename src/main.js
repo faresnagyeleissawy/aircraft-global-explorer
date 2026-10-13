@@ -67,7 +67,8 @@ const MAX_DROP = 400;
 // Public OSRM demo server: free, no key, best effort.
 const ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
 // OpenStreetMap's Nominatim geocoder: free, no key, at most one search a second.
-const GEOCODE_URL = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=en";
+const GEOCODE_URL = "https://nominatim.openstreetmap.org/search?format=jsonv2&accept-language=en";
+const MAX_RESULTS = 8; // places offered after a search
 const REVERSE_URL = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=en";
 // Photon, another free OpenStreetMap geocoder, is built for search-as-you-type
 // (Nominatim's rules do not allow that use).
@@ -435,15 +436,15 @@ function createGame(viewer, dataMode, world) {
       ? new Cesium.IonGeocoderService({ scene, geocodeProviderType: Cesium.IonGeocodeProviderType.GOOGLE })
       : null;
 
-  async function nominatim(text) {
+  async function nominatim(text, limit) {
     let rows;
     try {
-      const res = await fetch(GEOCODE_URL + "&q=" + encodeURIComponent(text.trim()));
+      const res = await fetch(GEOCODE_URL + "&limit=" + limit + "&q=" + encodeURIComponent(text.trim()));
       rows = await res.json();
     } catch {
       throw new Error("The address search did not answer. Try again in a moment.");
     }
-    return Array.isArray(rows) ? rows[0] : undefined;
+    return Array.isArray(rows) ? rows : [];
   }
 
   fetch(AIRPORTS_URL)
@@ -466,25 +467,34 @@ function createGame(viewer, dataMode, world) {
     });
   }
 
-  async function findAddress(text) {
+  // Places matching a search, best first: at most `limit` of them.
+  async function findAddresses(text, limit) {
     const coords = parseLatLon(text);
-    if (coords) return { ...coords, name: text.trim() };
+    if (coords) return [{ ...coords, name: text.trim() }];
     const airport = findAirport(airports, text);
-    if (airport) return airport;
+    if (airport) return [airport];
     const known = PLACES.find((p) => p.name.toLowerCase() === text.trim().toLowerCase());
-    if (known) return { lon: known.lon, lat: known.lat, name: known.name };
-    const missing = new Error('No place found for "' + text.trim() + '".');
+    if (known) return [{ lon: known.lon, lat: known.lat, name: known.name }];
     if (googleGeocoder) {
       const results = await googleGeocoder.geocode(text.trim());
-      if (!results.length) throw missing;
-      return fromGoogle(results[0]);
+      return results.filter((r) => r.destination).slice(0, limit).map(fromGoogle);
     }
-    // Anywhere in the world: the best-known match wins, as on a map site.
-    const row = await nominatim(text);
-    if (!row) throw missing;
-    const parts = row.display_name.split(", ");
-    const name = parts.length > 3 ? [parts[0], parts[1], parts[parts.length - 1]].join(", ") : row.display_name;
-    return { lon: Number(row.lon), lat: Number(row.lat), name };
+    // Anywhere in the world: the best-known match comes first, as on a map site.
+    const rows = await nominatim(text, limit);
+    return rows
+      .map((row) => {
+        const parts = row.display_name.split(", ");
+        const name = parts.length > 4 ? [...parts.slice(0, 3), parts[parts.length - 1]].join(", ") : row.display_name;
+        return { lon: Number(row.lon), lat: Number(row.lat), name };
+      })
+      .filter((place, i, all) => all.findIndex((other) => other.name === place.name) === i);
+  }
+
+  // The best match for a search.
+  async function findAddress(text) {
+    const [best] = await findAddresses(text, 1);
+    if (!best) throw new Error('No place found for "' + text.trim() + '".');
+    return best;
   }
 
   function fromGoogle(result) {
@@ -813,9 +823,18 @@ function createGame(viewer, dataMode, world) {
     const text = $("search-input").value;
     if (!text.trim()) return;
     runNav(async () => {
-      const found = await resolvePlace("search-input");
-      await travelTo(found.lon, found.lat, state.heading);
-      return "Moved to " + found.name;
+      // A place already picked from the list is gone to. Anything else typed
+      // is searched for, and several matches are listed to choose from.
+      const chosen = picked.get("search-input");
+      suggest["search-input"].cancel();
+      const found = chosen && chosen.name === text ? [chosen] : await findAddresses(text, MAX_RESULTS);
+      if (!found.length) throw new Error('No place found for "' + text.trim() + '".');
+      if (found.length > 1) {
+        suggest["search-input"].show(found);
+        return found.length + " places found. Choose one from the list.";
+      }
+      await travelTo(found[0].lon, found[0].lat, state.heading);
+      return "Moved to " + found[0].name;
     });
   });
 

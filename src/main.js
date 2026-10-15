@@ -39,6 +39,7 @@ const DATA_KEY = "dubai3d.data";
 const PLACE_KEY = "dubai3d.place";
 const QUALITY_KEY = "dubai3d.quality";
 const MINIMAP_KEY = "dubai3d.minimap";
+const FREE_MAX_SPEED = 5; // flying by hand, the game cannot keep up with more than this
 const MINIMAP_EVERY = 250; // ms between moves of the plane on the small map
 
 // ?offline runs on a plain globe with no Cesium ion data (used for local testing).
@@ -357,7 +358,8 @@ function createGame(viewer, dataMode, world) {
   let parked = false; // standing on the runway after landing, until an arrow key is pressed
   let trip = null; // the flight being flown from one place to another, see trip.js
   let autopilot = false; // true while the trip flies itself
-  let timeScale = 1; // how much faster than real time the autopilot is asked to fly
+  let timeScale = 1; // how much faster than real time the game is asked to run (the speed buttons)
+  let paused = false;
   let flownScale = 1; // and how fast it is flying right now (real time near the ground)
   let place = PLACES.find((p) => p.id === storageGet(PLACE_KEY)) || PLACES[0];
   let state = createState(0, 0, 0, 0);
@@ -738,10 +740,33 @@ function createGame(viewer, dataMode, world) {
     setAutopilot(!autopilot);
     e.currentTarget.blur();
   });
-  $("trip-speed").addEventListener("change", (e) => {
-    timeScale = Number(e.target.value) || 1;
-    e.target.blur();
+
+  // ------------------------------------------------------------ pause and speed
+
+  function setPaused(on) {
+    paused = on;
+    $("pause").textContent = paused ? "▶ Carry on" : "⏸ Pause";
+    $("pause").classList.toggle("active", paused);
+    if (!paused) lastTime = performance.now(); // no jump for the time spent paused
+  }
+
+  function setSpeed(scale) {
+    timeScale = scale;
+    for (const button of $("time-bar").querySelectorAll("[data-speed]")) {
+      button.classList.toggle("active", Number(button.dataset.speed) === scale);
+    }
+  }
+
+  $("pause").addEventListener("click", (e) => {
+    setPaused(!paused);
+    e.currentTarget.blur();
   });
+  for (const button of $("time-bar").querySelectorAll("[data-speed]")) {
+    button.addEventListener("click", () => {
+      setSpeed(Number(button.dataset.speed));
+      button.blur();
+    });
+  }
   $("trip-end").addEventListener("click", (e) => {
     clearRoute();
     $("nav-status").textContent = "";
@@ -1061,6 +1086,7 @@ function createGame(viewer, dataMode, world) {
   function startPicking() {
     $("start-dialog").hidden = true;
     picking = { points: [], marks: [] };
+    document.body.classList.add("picking");
     if (narrow.matches) setMenu(false);
     plane.show = false;
     showMessage("");
@@ -1120,6 +1146,7 @@ function createGame(viewer, dataMode, world) {
     const [a, b] = picking.points;
     clearPickMarks();
     picking = null;
+    document.body.classList.remove("picking");
     scene.screenSpaceCameraController.enableInputs = false;
     updatePickBar();
     if (fly && a && b) {
@@ -1344,6 +1371,7 @@ function createGame(viewer, dataMode, world) {
     if (!placed || picking) return; // still choosing where to fly
     if (code === "KeyV") setView(VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length]);
     else if (code === "KeyA") setAutopilot(!autopilot);
+    else if (code === "KeyP" || code === "Space") setPaused(!paused);
     else if (code === "KeyM") setMinimapOpen($("minimap-box").classList.contains("closed"));
     else if (code === "KeyR") spawn();
     else if (code === "KeyH") toggleHelp();
@@ -1422,6 +1450,15 @@ function createGame(viewer, dataMode, world) {
     const dt = Math.min(0.1, (now - lastTime) / 1000);
     lastTime = now;
     if (!placed || picking) return;
+    $("time-bar").hidden = false;
+
+    // Paused: nothing moves, but the camera can still be turned and zoomed.
+    if (paused) {
+      updateCamera(dt);
+      updateHud(lastGround);
+      showMessage("Paused");
+      return;
+    }
 
     // After a long trip, move the sun and the building shader along too.
     if (!reanchoring && distance(here(), anchor) > REANCHOR_DISTANCE) {
@@ -1447,6 +1484,7 @@ function createGame(viewer, dataMode, world) {
         showMessage("");
       }
     } else if (trip && autopilot) {
+      flownScale = 1;
       const low = trip.runways && tripState(trip, trip.flown).clearance < HANDS_OFF;
       if ((input.up || input.down || input.left || input.right) && low) {
         flash("The autopilot keeps the controls this close to the ground.", 3);
@@ -1476,7 +1514,10 @@ function createGame(viewer, dataMode, world) {
         state.throttle = 0.4;
       }
     } else {
-      updatePlane(state, input, dt, sampleGround);
+      // Faster by taking several ordinary steps per frame.
+      const steps = Math.min(timeScale, FREE_MAX_SPEED);
+      for (let i = 0; i < steps && !state.crashed; i++) updatePlane(state, input, dt, sampleGround);
+      flownScale = steps;
       if (state.crashed) showMessage("Crashed! Respawning…");
     }
     if (trip) updateTripBar();
@@ -1576,7 +1617,7 @@ function createGame(viewer, dataMode, world) {
 
   function updateHud(ground) {
     const kmh = Math.round(Math.abs(state.speed) * 3.6);
-    $("hud-speed").textContent = kmh + " km/h" + (trip && autopilot && flownScale > 1 ? " ×" + flownScale : "");
+    $("hud-speed").textContent = kmh + " km/h" + (flownScale > 1 && !parked ? " ×" + flownScale : "");
     const agl = ground !== undefined ? Math.max(0, Math.round(state.height - ground)) : null;
     $("hud-alt").textContent = agl !== null ? agl + " m above ground" : "—";
     $("hud-throttle").textContent = "Throttle " + Math.round(state.throttle * 100) + "%";

@@ -323,10 +323,56 @@ button.link {
     inset 0 0 24px rgba(0, 0, 0, 0.55);
 }
 
+#time-bar {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 10px;
+  background: var(--panel-bg);
+}
+
+#time-bar button {
+  min-width: 38px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #39414d;
+  background: #0d1015;
+  color: var(--panel-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#time-bar button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #111;
+  font-weight: 700;
+}
+
+#time-bar #pause {
+  margin-right: 6px;
+}
+
+#time-bar .label {
+  margin: 0 2px 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+body.picking #time-bar {
+  display: none;
+}
+
 #demo-caption {
   position: absolute;
   z-index: 3;
-  top: 28px;
+  top: 64px;
   left: 50%;
   transform: translateX(-50%);
   max-width: calc(100vw - 620px);
@@ -672,8 +718,28 @@ body.menu-closed #panel {
     display: block;
   }
 
+  /* Just above the flight buttons, across the screen. */
+  #time-bar {
+    top: auto;
+    bottom: 222px;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    justify-content: center;
+  }
+
+  #time-bar button {
+    min-width: 0;
+    flex: 1;
+    padding: 7px 4px;
+  }
+
+  #time-bar #pause {
+    flex: 2;
+  }
+
   #trip-bar {
-    bottom: 216px;
+    bottom: 270px;
     width: calc(100vw - 24px);
     box-sizing: border-box;
     padding: 8px 10px;
@@ -758,7 +824,7 @@ body.menu-closed #panel {
   }
 
   #demo-caption {
-    top: 62px;
+    top: 228px;
     width: calc(100vw - 56px);
     max-width: none;
     padding: 8px 12px;

@@ -138,17 +138,18 @@
       <progress id="trip-progress" max="1" value="0"></progress>
       <div class="row">
         <button type="button" id="trip-autopilot" title="Autopilot (A)"></button>
-        <label>
-          Speed
-          <select id="trip-speed">
-            <option value="1">Real time</option>
-            <option value="5">×5</option>
-            <option value="20">×20</option>
-            <option value="60">×60</option>
-          </select>
-        </label>
         <button type="button" id="trip-end">End trip</button>
       </div>
+    </div>
+
+    <div id="time-bar" hidden>
+      <button type="button" id="pause" title="Pause (P or Space)">⏸ Pause</button>
+      <span class="label">Speed</span>
+      <button type="button" data-speed="1" class="active" title="Real time">1×</button>
+      <button type="button" data-speed="2">2×</button>
+      <button type="button" data-speed="5">5×</button>
+      <button type="button" data-speed="20" title="Trips on autopilot only; flying by hand stays at 5×">20×</button>
+      <button type="button" data-speed="60" title="Trips on autopilot only; flying by hand stays at 5×">60×</button>
     </div>
 
     <div id="demo-caption" hidden></div>
@@ -170,10 +171,11 @@
         <tr><td>Drag</td><td>Tilt and turn the view (right-click puts it back)</td></tr>
         <tr><td>Click</td><td>Show the name and address of that building or spot</td></tr>
         <tr><td>Double-click</td><td>Fly to that spot on the map</td></tr>
+        <tr><td>P or Space</td><td>Pause and carry on</td></tr>
         <tr><td>M</td><td>Show or hide the small map; click it to fly to that spot</td></tr>
       </table>
       <p>V changes the view: behind the plane, pilot's seat, left or right window seat. R goes back to the start point. B flies to Burj Khalifa. H hides this.</p>
-      <p>On a trip the autopilot flies for you. Touch an arrow key to take over and press A to hand back. The Speed menu makes a long flight pass faster.</p>
+      <p>On a trip the autopilot flies for you. Touch an arrow key to take over and press A to hand back. The speed buttons at the top make a long flight pass faster, and Pause stops everything.</p>
       <p>On a phone or tablet, the buttons at the bottom fly the plane, ☰ opens the menu, dragging a finger looks around and a double tap flies to that spot.</p>
       <p>"Demo" plays a three-minute tour of everything; Esc stops it.</p>
       <p>Search takes you to any place in the world. "Trip" flies from one airport or place to another. The address you are flying over is shown under the speed. Yellow planes are real flights; click one to see which.</p>

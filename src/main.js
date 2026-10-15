@@ -4,6 +4,7 @@ import { createInput } from "./input.js";
 import { PUBLIC_ION_TOKEN } from "./config.js";
 import { createFacade } from "./facade.js";
 import { createFlights } from "./flights.js";
+import { createMinimap } from "./minimap.js";
 import { labelBuildings } from "./labels.js";
 import { attachSuggest } from "./suggest.js";
 import {
@@ -37,6 +38,8 @@ const TOKEN_KEY = "dubai3d.ionToken";
 const DATA_KEY = "dubai3d.data";
 const PLACE_KEY = "dubai3d.place";
 const QUALITY_KEY = "dubai3d.quality";
+const MINIMAP_KEY = "dubai3d.minimap";
+const MINIMAP_EVERY = 250; // ms between moves of the plane on the small map
 
 // ?offline runs on a plain globe with no Cesium ion data (used for local testing).
 const params = new URLSearchParams(window.location.search);
@@ -536,13 +539,15 @@ function createGame(viewer, dataMode, world) {
   }
 
   // Nearest named place or address to a point in degrees, or "".
+  // Address parts (OpenStreetMap names: name, street, city, state, country,
+  // ...) of the nearest place to a point in degrees, or null.
   async function placeAround(lon, lat) {
     try {
       const res = await fetch(AROUND_URL + "&lon=" + lon.toFixed(5) + "&lat=" + lat.toFixed(5));
       const data = await res.json();
-      return data.features && data.features.length ? placeName(data.features[0].properties) : "";
+      return data.features && data.features.length ? data.features[0].properties : null;
     } catch {
-      return "";
+      return null;
     }
   }
 
@@ -555,8 +560,11 @@ function createGame(viewer, dataMode, world) {
     addressBusy = true;
     addressTime = now;
     addressAt = spot;
-    placeAround(spot.lon, spot.lat).then((text) => {
-      $("hud-address").textContent = text ? "Over: " + text : "";
+    placeAround(spot.lon, spot.lat).then((parts) => {
+      $("hud-address").textContent = parts ? "Over: " + placeName(parts) : "";
+      // The small map's heading: the province (governorate) and the country.
+      const region = parts ? [parts.state || parts.county, parts.country].filter(Boolean) : [];
+      $("minimap-place").textContent = [...new Set(region)].join(", ");
       addressBusy = false;
     });
   }
@@ -616,6 +624,7 @@ function createGame(viewer, dataMode, world) {
       },
     });
     routeEntities = [line, marker(points[0], "Start"), marker(points[points.length - 1], "Destination")];
+    if (minimap) minimap.setLine(points);
     refreshExclude();
   }
 
@@ -623,6 +632,7 @@ function createGame(viewer, dataMode, world) {
     for (const e of routeEntities) viewer.entities.remove(e);
     routeEntities = [];
     route = null;
+    if (minimap) minimap.setLine(null);
     trip = null;
     autopilot = false;
     if (parked) {
@@ -876,6 +886,37 @@ function createGame(viewer, dataMode, world) {
     flyToBurjKhalifa();
     e.currentTarget.blur();
   });
+
+  // ------------------------------------------------------------ small map
+
+  // Not with Google's tiles, whose terms rule out other maps beside them; and
+  // not if Leaflet could not be loaded.
+  const minimap =
+    window.L && dataMode !== "google"
+      ? createMinimap(window.L, $("minimap"), (lon, lat) => travelTo(lon, lat, state.heading))
+      : null;
+  let minimapTime = 0;
+
+  function setMinimapOpen(open) {
+    $("minimap-box").classList.toggle("closed", !open);
+    storageSet(MINIMAP_KEY, open ? null : "closed");
+    if (open && minimap) minimap.refresh();
+  }
+  $("minimap-toggle").addEventListener("click", (e) => {
+    setMinimapOpen($("minimap-box").classList.contains("closed"));
+    e.currentTarget.blur();
+  });
+  setMinimapOpen(storageGet(MINIMAP_KEY) !== "closed");
+
+  function updateMinimap(now) {
+    if (!minimap || now - minimapTime < MINIMAP_EVERY) return;
+    minimapTime = now;
+    if ($("minimap-box").hidden) {
+      $("minimap-box").hidden = false;
+      minimap.refresh();
+    }
+    minimap.update(toDeg(state.lon), toDeg(state.lat), toDeg(state.heading));
+  }
 
   // ------------------------------------------------------------ touch controls
 
@@ -1303,6 +1344,7 @@ function createGame(viewer, dataMode, world) {
     if (!placed || picking) return; // still choosing where to fly
     if (code === "KeyV") setView(VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length]);
     else if (code === "KeyA") setAutopilot(!autopilot);
+    else if (code === "KeyM") setMinimapOpen($("minimap-box").classList.contains("closed"));
     else if (code === "KeyR") spawn();
     else if (code === "KeyH") toggleHelp();
     else if (code === "KeyB") flyToBurjKhalifa();
@@ -1443,6 +1485,7 @@ function createGame(viewer, dataMode, world) {
     updateCamera(dt);
     updateHud(lastGround);
     updateAddress(now);
+    updateMinimap(now);
     flights.update(here(), now).then((changed) => {
       if (!changed) return;
       refreshExclude();

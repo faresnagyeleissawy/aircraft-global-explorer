@@ -480,6 +480,80 @@ button.link {
   cursor: pointer;
 }
 
+/* ------------------------------------------------------------ small map */
+
+#minimap-box {
+  position: absolute;
+  z-index: 2;
+  right: 12px;
+  bottom: 28px;
+  width: 250px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--panel-bg);
+  box-sizing: border-box;
+}
+
+#minimap-box .minimap-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 2px 5px;
+}
+
+#minimap-place {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#minimap-toggle {
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid #39414d;
+  background: #0d1015;
+  color: var(--panel-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#minimap {
+  height: 180px;
+  border-radius: 6px;
+  background: #aad3df;
+}
+
+#minimap-box.closed {
+  width: auto;
+}
+
+#minimap-box.closed #minimap,
+#minimap-box.closed #minimap-place {
+  display: none;
+}
+
+#minimap .leaflet-control-attribution {
+  font-size: 9px;
+}
+
+#minimap .leaflet-control-scale-line {
+  font-size: 10px;
+}
+
+.minimap-plane {
+  background: none;
+  border: none;
+}
+
+.minimap-plane svg {
+  display: block;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+}
+
 /* ------------------------------------------------------------ menu button */
 
 #menu-toggle {
@@ -649,6 +723,24 @@ body.menu-closed #panel {
     max-width: none;
     max-height: 70dvh;
     overflow-y: auto;
+  }
+
+  /* Under the menu button, out of the way of the flight buttons. */
+  #minimap-box {
+    top: 62px;
+    left: 12px;
+    right: auto;
+    bottom: auto;
+    width: 160px;
+    padding: 4px;
+  }
+
+  #minimap {
+    height: 120px;
+  }
+
+  #hud {
+    max-width: calc(100vw - 200px);
   }
 
   #pick-bar {

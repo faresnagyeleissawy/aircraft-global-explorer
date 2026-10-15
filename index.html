@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css" />
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Cesium.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   </head>
   <body>
     <div id="cesiumContainer"></div>
@@ -101,6 +103,14 @@
 
     <div id="hud-message" hidden></div>
 
+    <div id="minimap-box" hidden>
+      <div class="minimap-head">
+        <span id="minimap-place"></span>
+        <button type="button" id="minimap-toggle" title="Show or hide the map (M)">Map</button>
+      </div>
+      <div id="minimap"></div>
+    </div>
+
     <!-- On-screen controls for phones and tablets; hidden where there is a keyboard and mouse. -->
     <div id="touch">
       <div class="pad">
@@ -160,6 +170,7 @@
         <tr><td>Drag</td><td>Tilt and turn the view (right-click puts it back)</td></tr>
         <tr><td>Click</td><td>Show the name and address of that building or spot</td></tr>
         <tr><td>Double-click</td><td>Fly to that spot on the map</td></tr>
+        <tr><td>M</td><td>Show or hide the small map; click it to fly to that spot</td></tr>
       </table>
       <p>V changes the view: behind the plane, pilot's seat, left or right window seat. R goes back to the start point. B flies to Burj Khalifa. H hides this.</p>
       <p>On a trip the autopilot flies for you. Touch an arrow key to take over and press A to hand back. The Speed menu makes a long flight pass faster.</p>

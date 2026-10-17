@@ -1,4 +1,5 @@
-import { createState, updatePlane, offset } from "./physics.js";
+import { createState, updatePlane, updateHeli, offset } from "./physics.js";
+import { createHelicopter } from "./helicopter.js";
 import { PLACES } from "./places.js";
 import { createInput } from "./input.js";
 import { PUBLIC_ION_TOKEN } from "./config.js";
@@ -51,9 +52,14 @@ const OFFLINE = SIMPLE || params.has("offline");
 const STREET_MAP_URL = "https://tile.openstreetmap.org/";
 
 const PLANE_SPAWN_HEIGHT = 350;
+const HELI_SPAWN_HEIGHT = 150;
+const VEHICLE_KEY = "dubai3d.vehicle";
 // Chase camera: distance behind the plane and how far down it looks (radians).
-const CHASE_RANGE = 45;
-const CHASE_PITCH = -0.18;
+// Chase camera: distance behind each aircraft and how far down it looks (radians).
+const CHASE = {
+  plane: { range: 45, pitch: -0.18 },
+  heli: { range: 26, pitch: -0.24 },
+};
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 40;
 const RESPAWN_DELAY = 2.5;
@@ -402,13 +408,16 @@ function createGame(viewer, dataMode, world) {
     model: { uri: "models/Cesium_Air.glb", scale: 1.5 },
     show: false,
   });
+  // "plane" or "heli": which aircraft is flown by hand. Trips are always the plane.
+  let vehicle = storageGet(VEHICLE_KEY) === "heli" ? "heli" : "plane";
+  const helicopter = createHelicopter(Cesium, viewer, () => state);
   const flights = createFlights(Cesium, viewer, FLIGHTS_URL);
   const exclude = [];
 
   // Our own models, lines and labels must not count as ground under the player.
   function refreshExclude() {
     exclude.length = 0;
-    exclude.push(plane, ...routeEntities, ...flights.entities);
+    exclude.push(plane, ...helicopter.primitives, ...routeEntities, ...flights.entities);
     if (info) exclude.push(info);
   }
   refreshExclude();
@@ -654,6 +663,7 @@ function createGame(viewer, dataMode, world) {
   // Starts a flight from one place to another along the line a real flight
   // takes, on autopilot: the traveller watches, or takes over with the arrows.
   async function startTrip(from, to) {
+    if (vehicle === "heli") setVehicle("plane"); // trips are flown by the plane
     const length = distance(from, to);
     if (length < 2000) throw new Error("Those two places are too close together for a flight.");
     // With the advanced option, and a runway known at both ends, the trip
@@ -739,6 +749,44 @@ function createGame(viewer, dataMode, world) {
   $("trip-autopilot").addEventListener("click", (e) => {
     setAutopilot(!autopilot);
     e.currentTarget.blur();
+  });
+
+  // ------------------------------------------------------------ aircraft
+
+  // Changes between the plane and the helicopter where the player is now.
+  function setVehicle(next) {
+    if (next === vehicle) return;
+    vehicle = next;
+    storageSet(VEHICLE_KEY, next === "heli" ? "heli" : null);
+    $("vehicle-select").value = next;
+    document.body.classList.toggle("heli", next === "heli");
+    if (trip && next === "heli") {
+      clearRoute(); // trips are flown by the plane
+      $("nav-status").textContent = "";
+    }
+    parked = false;
+    state.crashed = false;
+    crashTimer = 0;
+    state.vz = 0;
+    state.pitch = 0;
+    state.roll = 0;
+    if (next === "plane") {
+      // A plane cannot hover: give it height and speed to fly with.
+      const g = sampleGround(state.lon, state.lat);
+      if (g !== undefined && state.height - g < 150) state.height = g + 150;
+      state.speed = 70;
+      state.throttle = 0.4;
+    } else {
+      state.speed = Math.min(state.speed, 40);
+    }
+    flash(next === "heli" ? "Helicopter: W / S or Power to go up and down" : "Plane", 3);
+  }
+
+  $("vehicle-select").value = vehicle;
+  document.body.classList.toggle("heli", vehicle === "heli");
+  $("vehicle-select").addEventListener("change", (e) => {
+    setVehicle(e.target.value);
+    e.target.blur();
   });
 
   // ------------------------------------------------------------ pause and speed
@@ -1372,6 +1420,8 @@ function createGame(viewer, dataMode, world) {
     if (code === "KeyV") setView(VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length]);
     else if (code === "KeyA") setAutopilot(!autopilot);
     else if (code === "KeyP" || code === "Space") setPaused(!paused);
+    else if (code === "Digit1") setVehicle("plane");
+    else if (code === "Digit2") setVehicle("heli");
     else if (code === "KeyM") setMinimapOpen($("minimap-box").classList.contains("closed"));
     else if (code === "KeyR") spawn();
     else if (code === "KeyH") toggleHelp();
@@ -1421,7 +1471,7 @@ function createGame(viewer, dataMode, world) {
   }
 
   // Puts the plane in the air, `lift` meters above ground level at a point (degrees).
-  function placeAt(lon, lat, heading, ground, lift = PLANE_SPAWN_HEIGHT) {
+  function placeAt(lon, lat, heading, ground, lift = vehicle === "heli" ? HELI_SPAWN_HEIGHT : PLANE_SPAWN_HEIGHT) {
     state = createState(toRad(lon), toRad(lat), ground + lift, heading);
     if (narrow.matches) setMenu(false);
     setAnchor(lon, lat, ground);
@@ -1429,7 +1479,7 @@ function createGame(viewer, dataMode, world) {
     camHeading = heading;
     crashTimer = 0;
     lastGround = undefined;
-    state.speed = 70;
+    state.speed = vehicle === "heli" ? 0 : 70; // a helicopter arrives hovering
     showMessage("");
   }
 
@@ -1477,7 +1527,8 @@ function createGame(viewer, dataMode, world) {
         state.crashed = false;
         crashTimer = 0;
         state.height = (g !== undefined ? g : state.height) + 200;
-        state.speed = 70;
+        state.speed = vehicle === "heli" ? 0 : 70;
+        state.vz = 0;
         state.pitch = 0;
         state.roll = 0;
         state.throttle = 0.4;
@@ -1516,7 +1567,8 @@ function createGame(viewer, dataMode, world) {
     } else {
       // Faster by taking several ordinary steps per frame.
       const steps = Math.min(timeScale, FREE_MAX_SPEED);
-      for (let i = 0; i < steps && !state.crashed; i++) updatePlane(state, input, dt, sampleGround);
+      const fly = vehicle === "heli" ? updateHeli : updatePlane;
+      for (let i = 0; i < steps && !state.crashed; i++) fly(state, input, dt, sampleGround);
       flownScale = steps;
       if (state.crashed) showMessage("Crashed! Respawning…");
     }
@@ -1532,7 +1584,9 @@ function createGame(viewer, dataMode, world) {
       refreshExclude();
       updateFlightsNote();
     });
-    plane.show = view === "chase";
+    plane.show = view === "chase" && vehicle === "plane";
+    helicopter.update(dt);
+    helicopter.setShown(view === "chase" && vehicle === "heli");
   }
 
   function updateCamera(dt) {
@@ -1543,7 +1597,7 @@ function createGame(viewer, dataMode, world) {
       orbit.pitch = Math.min(0.6, Math.max(-1.4, orbit.pitch));
       camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
       camera.setView({
-        destination: Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height + 1.2),
+        destination: Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height + (vehicle === "heli" ? 1.8 : 1.2)),
         orientation: {
           heading: state.heading + side + orbit.heading,
           pitch: (side ? -0.2 : state.pitch) + orbit.pitch,
@@ -1566,11 +1620,12 @@ function createGame(viewer, dataMode, world) {
 
     // Zooming out also tilts the camera down, towards a map-like view from above.
     // Dragging the mouse adds its own turn and tilt, from straight down to a little upwards.
-    const zoomTilt = Math.max(-1.3, CHASE_PITCH - Math.max(0, Math.log(zoom)) * 0.3);
+    const chase = CHASE[vehicle];
+    const zoomTilt = Math.max(-1.3, chase.pitch - Math.max(0, Math.log(zoom)) * 0.3);
     const pitch = Math.min(0.3, Math.max(-1.5, zoomTilt + orbit.pitch));
     orbit.pitch = pitch - zoomTilt; // so a drag past the limit does not have to be undone first
     const target = Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height);
-    camera.lookAt(target, new Cesium.HeadingPitchRange(camHeading + orbit.heading, pitch, CHASE_RANGE * zoom));
+    camera.lookAt(target, new Cesium.HeadingPitchRange(camHeading + orbit.heading, pitch, chase.range * zoom));
   }
 
   // ------------------------------------------------------------ HUD
@@ -1620,7 +1675,12 @@ function createGame(viewer, dataMode, world) {
     $("hud-speed").textContent = kmh + " km/h" + (flownScale > 1 && !parked ? " ×" + flownScale : "");
     const agl = ground !== undefined ? Math.max(0, Math.round(state.height - ground)) : null;
     $("hud-alt").textContent = agl !== null ? agl + " m above ground" : "—";
-    $("hud-throttle").textContent = "Throttle " + Math.round(state.throttle * 100) + "%";
+    $("hud-throttle").textContent =
+      vehicle === "plane"
+        ? "Throttle " + Math.round(state.throttle * 100) + "%"
+        : state.grounded
+          ? "Landed"
+          : (state.vz >= 0 ? "Climbing " : "Descending ") + Math.abs(state.vz).toFixed(1) + " m/s";
     const deg = Math.round(Cesium.Math.toDegrees(state.heading) + 360) % 360;
     $("hud-heading").textContent = deg + "° " + compass(deg);
     updateTarget();

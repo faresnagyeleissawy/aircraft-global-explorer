@@ -57,6 +57,13 @@
         <button id="fly-burj" title="Fly to Burj Khalifa (B)">Fly to Burj Khalifa (B)</button>
       </div>
       <label>
+        Aircraft (1 / 2)
+        <select id="vehicle-select">
+          <option value="plane">Plane</option>
+          <option value="heli">Helicopter</option>
+        </select>
+      </label>
+      <label>
         View (V)
         <select id="view-select">
           <option value="chase">Behind the plane</option>
@@ -124,7 +131,9 @@
         <button type="button" data-zoom="1.4" aria-label="Zoom out">－</button>
         <button type="button" data-action="KeyV">View</button>
         <button type="button" data-action="KeyA">Auto</button>
-        <button type="button" data-key="boost">Faster</button>
+        <button type="button" data-key="throttleUp" aria-label="More power: faster, or up in the helicopter">Power +</button>
+        <button type="button" data-key="throttleDown" aria-label="Less power: slower, or down in the helicopter">Power −</button>
+        <button type="button" data-key="boost" class="plane-only">Faster</button>
       </div>
     </div>
 
@@ -171,6 +180,8 @@
         <tr><td>Drag</td><td>Tilt and turn the view (right-click puts it back)</td></tr>
         <tr><td>Click</td><td>Show the name and address of that building or spot</td></tr>
         <tr><td>Double-click</td><td>Fly to that spot on the map</td></tr>
+        <tr><td>1 / 2</td><td>Plane / helicopter</td></tr>
+        <tr><td>Helicopter</td><td>↑ / ↓ forward and back, ← / → turn, W / S (or Shift with ↑ / ↓) up and down. Without keys it hovers; come down slowly to land.</td></tr>
         <tr><td>P or Space</td><td>Pause and carry on</td></tr>
         <tr><td>M</td><td>Show or hide the small map; click it to fly to that spot</td></tr>
       </table>

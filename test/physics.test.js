@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createState, updatePlane, offset } from "../src/physics.js";
+import { createState, updatePlane, updateHeli, offset } from "../src/physics.js";
 
 const rad = (d) => (d * Math.PI) / 180;
 const LON = rad(55.27);
@@ -50,4 +50,58 @@ test("plane ignores ground that has not loaded", () => {
   s.speed = 80;
   run(updatePlane, s, noKeys, 1, () => undefined);
   assert.equal(s.crashed, false);
+});
+
+test("helicopter hovers without input and climbs with W", () => {
+  const s = createState(LON, LAT, 100, 0);
+  run(updateHeli, s, noKeys, 3, flat);
+  assert.ok(Math.abs(s.height - 100) < 1e-9, "held its height");
+  assert.equal(s.speed, 0);
+  run(updateHeli, s, { ...noKeys, throttleUp: true }, 3, flat);
+  assert.ok(s.height > 110, "climbed: " + s.height);
+});
+
+test("helicopter flies forward with the up arrow and turns on the spot", () => {
+  const s = createState(LON, LAT, 100, 0);
+  run(updateHeli, s, { ...noKeys, up: true }, 5, flat);
+  assert.ok(s.lat > LAT && s.speed > 20, "moving north");
+  assert.ok(s.pitch < 0, "nose down");
+  const t = createState(LON, LAT, 100, 0);
+  run(updateHeli, t, { ...noKeys, right: true }, 1, flat);
+  assert.ok(t.heading > 0.5 && t.lat === LAT, "turned without moving");
+});
+
+test("helicopter lands gently but crashes when it comes down too fast", () => {
+  const s = createState(LON, LAT, 20, 0);
+  run(updateHeli, s, { ...noKeys, throttleDown: true }, 10, flat);
+  assert.equal(s.crashed, false);
+  assert.equal(s.height, 0);
+  assert.equal(s.grounded, true);
+
+  const t = createState(LON, LAT, 5, 0);
+  t.vz = -12;
+  run(updateHeli, t, noKeys, 3, flat);
+  assert.equal(t.crashed, true);
+});
+
+test("helicopter stops at a building when slow and crashes into it when fast", () => {
+  const slow = createState(LON, LAT, 10, 0);
+  slow.speed = 5;
+  run(updateHeli, slow, noKeys, 6, groundWithWall);
+  assert.equal(slow.crashed, false);
+  assert.ok(slow.lat < wallLat, "did not pass through the wall");
+
+  const fast = createState(LON, LAT, 10, 0);
+  fast.speed = 60;
+  run(updateHeli, fast, { ...noKeys, up: true }, 2, groundWithWall);
+  assert.equal(fast.crashed, true);
+});
+
+test("helicopter comes down fast from high up and slows near the ground", () => {
+  const s = createState(LON, LAT, 400, 0);
+  run(updateHeli, s, { ...noKeys, throttleDown: true }, 5, flat);
+  assert.ok(s.vz < -10, "fast descent high up: " + s.vz);
+  run(updateHeli, s, { ...noKeys, throttleDown: true }, 60, flat);
+  assert.equal(s.crashed, false, "slowed down in time to land");
+  assert.equal(s.grounded, true);
 });

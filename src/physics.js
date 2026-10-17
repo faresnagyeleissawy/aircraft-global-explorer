@@ -1,4 +1,4 @@
-// Movement model for the plane. Pure functions with no Cesium imports, so
+// Movement models for the plane and the helicopter. Pure functions with no Cesium imports, so
 // they can be unit tested in Node with a fake ground function.
 //
 // Angles are radians. heading: 0 = north, clockwise. lon/lat: radians.
@@ -38,11 +38,12 @@ export function createState(lon, lat, height, heading = 0) {
   return {
     lon,
     lat,
-    height, // aircraft height above the ellipsoid
+    height, // aircraft height above the ellipsoid (a helicopter's skids)
     heading,
     pitch: 0, // nose up is positive
     roll: 0,
     speed: 0,
+    vz: 0, // helicopter climb rate, m/s
     throttle: 0.4,
     crashed: false,
   };
@@ -83,5 +84,81 @@ export function updatePlane(s, input, dt, ground) {
   if (g !== undefined && s.height < g + PLANE.clearance) {
     s.crashed = true;
     s.speed = 0;
+  }
+}
+
+export const HELI = {
+  maxSpeed: 75, // about 270 km/h
+  maxReverse: -15,
+  accel: 6,
+  turnRate: 0.9,
+  climbRate: 8,
+  descentRate: 5, // near the ground: slower than safeTouchdown, so holding S all the way down lands safely
+  fastDescent: 12, // high up
+  lowAltitude: 60, // meters above the ground where it slows to descentRate
+  verticalAccel: 6,
+  safeTouchdown: 6, // m/s down: anything faster on landing is a crash
+  crashSpeed: 25, // m/s: hitting a wall faster than this is a crash, slower just stops
+  maxStep: 1.5, // ground this much higher ahead is a wall; less is a slope to slide up
+};
+
+// Up/down arrows fly forward and back, left/right turn on the spot. Climbing
+// and descending: W / S, or the up/down arrows with Shift held. Without input
+// it hovers. It can land on the ground or a roof if it comes down gently.
+export function updateHeli(s, input, dt, ground) {
+  if (s.crashed) return;
+  const turn = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  s.heading = wrapAngle(s.heading + turn * HELI.turnRate * dt);
+
+  const arrows = (input.up ? 1 : 0) - (input.down ? 1 : 0);
+  const forward = input.boost ? 0 : arrows;
+  const lift = clamp((input.boost ? arrows : 0) + (input.throttleUp ? 1 : 0) - (input.throttleDown ? 1 : 0), -1, 1);
+
+  const target = forward > 0 ? HELI.maxSpeed : forward < 0 ? HELI.maxReverse : 0;
+  const rate = forward !== 0 ? HELI.accel : HELI.accel * 0.6;
+  s.speed += clamp(target - s.speed, -rate * dt, rate * dt);
+  const below = ground(s.lon, s.lat);
+  const high = below === undefined || s.height - below > HELI.lowAltitude;
+  const down = high ? HELI.fastDescent : HELI.descentRate;
+  s.vz += clamp(lift * (lift > 0 ? HELI.climbRate : down) - s.vz, -HELI.verticalAccel * dt, HELI.verticalAccel * dt);
+
+  // Nose down to go forward, lean into turns: only for looks.
+  s.pitch = clamp(-0.06 * forward - (0.15 * s.speed) / HELI.maxSpeed, -0.3, 0.3);
+  s.roll = turn * 0.25 * clamp(Math.abs(s.speed) / HELI.maxSpeed, 0.2, 1);
+
+  s.blocked = false;
+  if (Math.abs(s.speed) > 0.01) {
+    const next = offset(s.lon, s.lat, s.speed * dt, s.heading);
+    const ahead = ground(next.lon, next.lat);
+    if (ahead !== undefined && ahead - s.height > HELI.maxStep) {
+      if (Math.abs(s.speed) > HELI.crashSpeed) {
+        s.crashed = true;
+        s.speed = 0;
+        s.vz = 0;
+        return;
+      }
+      s.blocked = true;
+      s.speed = 0;
+    } else {
+      s.lon = next.lon;
+      s.lat = next.lat;
+    }
+  }
+
+  s.height += s.vz * dt;
+  const g = ground(s.lon, s.lat);
+  s.grounded = false;
+  if (g !== undefined && s.height <= g) {
+    if (s.vz < -HELI.safeTouchdown) {
+      s.crashed = true;
+      s.speed = 0;
+      s.vz = 0;
+      s.height = g;
+      return;
+    }
+    s.height = g;
+    if (s.vz < 0) s.vz = 0;
+    s.grounded = true;
+    if (forward === 0) s.speed *= 1 - Math.min(1, dt * 3); // skids do not slide
   }
 }

@@ -1,5 +1,6 @@
 // Keyboard state. The arrow keys (with Shift for more throttle) are all the
-// plane needs; W and S are extra keys for throttle. Other keys trigger actions.
+// plane needs; W and S are extra keys for throttle, Q and E for the rudder.
+// Other keys trigger actions.
 const KEY_MAP = {
   ArrowUp: "up",
   ArrowDown: "down",
@@ -9,6 +10,8 @@ const KEY_MAP = {
   ShiftRight: "boost",
   KeyW: "throttleUp",
   KeyS: "throttleDown",
+  KeyQ: "yawLeft",
+  KeyE: "yawRight",
 };
 
 export function createInput(onAction) {
@@ -20,6 +23,8 @@ export function createInput(onAction) {
     boost: false,
     throttleUp: false,
     throttleDown: false,
+    yawLeft: false,
+    yawRight: false,
   };
 
   function isTyping(e) {

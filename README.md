@@ -27,8 +27,9 @@ Go to **Settings → Pages** in the repository and choose "Deploy from a branch"
 
 | Key | Plane |
 | --- | --- |
-| ↑ / ↓ | Climb / dive |
-| ← / → | Bank and turn |
+| ↑ / ↓ | Nose up / down; hold for a loop |
+| ← / → | Roll left / right; hold to roll right round |
+| Q / E | Rudder: nose left / right |
 | Shift | More throttle |
 | Mouse wheel | Zoom in and out |
 | Drag | Tilt and turn the view around the plane |
@@ -55,6 +56,7 @@ The arrow keys and Shift are all you need. W and S also work for throttle up and
 - **Famous places** is a short list of cities and landmarks to jump to.
 - **Live flights**: real aircraft within about 185 km are drawn as yellow planes with their callsign and type, at their real position and height, and they keep moving between reports. Click one for its height and speed. The positions come from [adsb.lol](https://adsb.lol) every 10 seconds. That service cannot be called from a web page, so `server.js` relays it: live flights work when you run the game with `npm start`, and not on a static host such as GitHub Pages.
 - **Helicopter**: the Aircraft menu (or 1 and 2) switches between the plane and a helicopter, wherever you are. The helicopter hovers when you let go; ↑ / ↓ fly forward and back, ← / → turn on the spot, and W / S (Power + / − on a phone, or Shift with ↑ / ↓) go up and down. It can land on the ground or on a roof if it comes down gently, and crashes if it comes down too fast or hits a building at speed. It is modelled on a light helicopter such as the Airbus H125: a white cabin with a glass nose and red stripes, an engine cowling, a tapering tail with stabilizer, swept fin and spinning tail rotor, skids on cross tubes, and a spinning three-blade main rotor. It is built from simple shapes, since there is no free helicopter model to load. Trips are always flown by the plane.
+- **Flying like a real aircraft**: the plane and the jet keep their full attitude, so they can loop, roll right round, fly upside down and turn by banking and pulling, as real ones do. Climbing costs speed and diving gains it; too slow, or on its side without pulling, the nose drops. The chase camera turns with the aircraft through all of it. In the menu, "Flight assist" (on by default) levels the wings and nose when you let go of the keys, and "Pilot controls" swaps ↑ / ↓ so that ↑ pushes the nose down, as with a real stick. The display shows pitch, bank and "upside down".
 - **F-35 fighter jet**: the third choice in the Aircraft menu (or 3). It flies like the plane but much faster (up to about Mach 1.6), climbs and dives more steeply and turns far tighter; Shift or Power + gives full thrust. It is shaped like an F-35 from simple shapes: pointed nose, gold-tinted canopy, side intakes, trapezoid wings, swept tailplanes and twin fins leaning outwards. Trips are still flown by the plane.
 - **Pause and speed**: the bar at the top has a Pause button (or P, or Space) that stops the plane, the trip and the live flights while you can still look around, and speed buttons for 1×, 2×, 5×, 20× and 60×. Flying by hand goes up to 5×; 20× and 60× are for trips on autopilot. Near the ground on a runway trip the flight stays in real time.
 - **Map on the ground**: the menu's "Map on the ground" switches between satellite photos, satellite photos with place names, and the OpenStreetMap street map. The small map follows it: satellite photos with country and province borders and names, or the street map. Without a Cesium ion token the satellite photos come from Esri's World Imagery.

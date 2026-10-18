@@ -1,4 +1,4 @@
-import { createState, updatePlane, updateHeli, updateJet, offset } from "./physics.js";
+import { createState, updatePlane, updateHeli, updateJet, offset, attitudeVectors, rotateVector } from "./physics.js";
 import { createHelicopter } from "./helicopter.js";
 import { createJet } from "./jet.js";
 import { PLACES } from "./places.js";
@@ -42,6 +42,9 @@ const PLACE_KEY = "dubai3d.place";
 const QUALITY_KEY = "dubai3d.quality";
 const MINIMAP_KEY = "dubai3d.minimap";
 const SAVED_KEY = "dubai3d.saved";
+const ASSIST_KEY = "dubai3d.assist";
+const INVERT_KEY = "dubai3d.invert";
+const CHASE_EASE = 4; // how quickly the chase camera swings round after the aircraft, per second
 const TILT_KEY = "dubai3d.tilt";
 const MAX_SAVED = 50;
 const FREE_MAX_SPEED = 5; // flying by hand, the game cannot keep up with more than this
@@ -1684,6 +1687,7 @@ function createGame(viewer, dataMode, world) {
     setAnchor(lon, lat, ground);
     placed = true;
     camHeading = heading;
+    chaseF = null; // the chase camera starts straight behind
     crashTimer = 0;
     lastGround = undefined;
     state.speed = START_SPEED[vehicle];
@@ -1775,7 +1779,8 @@ function createGame(viewer, dataMode, world) {
       // Faster by taking several ordinary steps per frame.
       const steps = Math.min(timeScale, FREE_MAX_SPEED);
       const fly = { plane: updatePlane, jet: updateJet, heli: updateHeli }[vehicle];
-      for (let i = 0; i < steps && !state.crashed; i++) fly(state, input, dt, sampleGround);
+      const controls = vehicle === "heli" ? input : flightControls();
+      for (let i = 0; i < steps && !state.crashed; i++) fly(state, controls, dt, sampleGround);
       flownScale = steps;
       if (state.crashed) showMessage("Crashed! Respawning…");
     }
@@ -1822,6 +1827,13 @@ function createGame(viewer, dataMode, world) {
       zoom += (demo.zoomTo - zoom) * Math.min(1, dt * 0.8);
     }
 
+    // Plane and jet: the camera sits behind and above the aircraft in its own
+    // frame, so it follows it through loops and rolls.
+    if (vehicle !== "heli" && !$("tilt-zoom").checked) {
+      followAircraft(dt);
+      return;
+    }
+
     // Chase camera: trails behind the plane and swings round smoothly on turns.
     let diff = state.heading - camHeading;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -1836,6 +1848,78 @@ function createGame(viewer, dataMode, world) {
     orbit.pitch = pitch - zoomTilt; // so a drag past the limit does not have to be undone first
     const target = Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height);
     camera.lookAt(target, new Cesium.HeadingPitchRange(camHeading + orbit.heading, pitch, chase.range * zoom));
+  }
+
+  // The camera behind a plane or jet, turned with it. Its own copy of the
+  // aircraft's directions eases after the real ones, so turns look smooth.
+  let chaseF = null;
+  let chaseU = null;
+  const toEarth = new Cesium.Matrix4();
+
+  function followAircraft(dt) {
+    const { f, u } = attitudeVectors(state);
+    if (!chaseF) {
+      chaseF = f;
+      chaseU = u;
+    }
+    const ease = Math.min(1, dt * CHASE_EASE);
+    const mix = (a, b) => {
+      const v = a.map((x, i) => x + (b[i] - x) * ease);
+      const n = Math.hypot(...v) || 1;
+      return v.map((x) => x / n);
+    };
+    chaseF = mix(chaseF, f);
+    chaseU = mix(chaseU, u);
+    const right = [
+      chaseF[1] * chaseU[2] - chaseF[2] * chaseU[1],
+      chaseF[2] * chaseU[0] - chaseF[0] * chaseU[2],
+      chaseF[0] * chaseU[1] - chaseF[1] * chaseU[0],
+    ];
+
+    // Behind and a little above, swung round by any mouse drag.
+    const range = CHASE[vehicle].range * zoom;
+    let back = chaseF.map((x, i) => -x * range + chaseU[i] * range * 0.2);
+    back = rotateVector(back, chaseU, -orbit.heading);
+    back = rotateVector(back, right, orbit.pitch);
+    const up = rotateVector(chaseU, right, orbit.pitch);
+
+    const target = Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height);
+    Cesium.Transforms.eastNorthUpToFixedFrame(target, undefined, toEarth);
+    const fromEnu = (v) => Cesium.Matrix4.multiplyByPointAsVector(toEarth, new Cesium.Cartesian3(...v), new Cesium.Cartesian3());
+    const eye = Cesium.Cartesian3.add(target, fromEnu(back), new Cesium.Cartesian3());
+    const ahead = Cesium.Cartesian3.add(target, fromEnu(chaseF.map((x) => x * range * 0.3)), new Cesium.Cartesian3());
+    camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    camera.setView({
+      destination: eye,
+      orientation: {
+        direction: Cesium.Cartesian3.normalize(Cesium.Cartesian3.subtract(ahead, eye, new Cesium.Cartesian3()), new Cesium.Cartesian3()),
+        up: Cesium.Cartesian3.normalize(fromEnu(up), new Cesium.Cartesian3()),
+      },
+    });
+  }
+
+  // The keys as the plane and jet take them: with the flight assist, and with
+  // ↑ / ↓ swapped for players who fly like pilots (stick forward, nose down).
+  function flightControls() {
+    const invert = $("invert-pitch").checked;
+    return {
+      ...input,
+      assist: $("flight-assist").checked,
+      up: invert ? input.down : input.up,
+      down: invert ? input.up : input.down,
+    };
+  }
+
+  for (const [id, key, onByDefault] of [
+    ["flight-assist", ASSIST_KEY, true],
+    ["invert-pitch", INVERT_KEY, false],
+  ]) {
+    const saved = storageGet(key);
+    $(id).checked = saved === null ? onByDefault : saved === "1";
+    $(id).addEventListener("change", (e) => {
+      storageSet(key, e.target.checked ? "1" : "0");
+      e.target.blur();
+    });
   }
 
   // ------------------------------------------------------------ HUD
@@ -1892,7 +1976,12 @@ function createGame(viewer, dataMode, world) {
           ? "Landed"
           : (state.vz >= 0 ? "Climbing " : "Descending ") + Math.abs(state.vz).toFixed(1) + " m/s";
     const deg = Math.round(Cesium.Math.toDegrees(state.heading) + 360) % 360;
-    $("hud-heading").textContent = deg + "° " + compass(deg);
+    // Planes and jets also show their attitude: nose up or down, and bank.
+    const attitude =
+      vehicle === "heli"
+        ? ""
+        : " · pitch " + Math.round(Cesium.Math.toDegrees(state.pitch)) + "° · bank " + Math.round(Cesium.Math.toDegrees(state.roll)) + "°" + (Math.abs(state.roll) > Math.PI / 2 ? " · upside down" : "");
+    $("hud-heading").textContent = deg + "° " + compass(deg) + attitude;
     updateTarget();
     if (!state.crashed) showMessage(performance.now() < flashUntil ? flashText : "");
   }

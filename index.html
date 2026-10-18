@@ -100,6 +100,14 @@
           <option value="right">Right window seat</option>
         </select>
       </label>
+      <label class="check" title="The wings level out and the nose comes back to the horizon when you let go of the keys">
+        <input type="checkbox" id="flight-assist" />
+        <span>Flight assist: level out when keys are let go</span>
+      </label>
+      <label class="check" title="As in a real cockpit: pushing the stick forward points the nose down">
+        <input type="checkbox" id="invert-pitch" />
+        <span>Pilot controls: ↑ = nose down</span>
+      </label>
       <label class="check" title="Off: the camera keeps its angle when you zoom out">
         <input type="checkbox" id="tilt-zoom" />
         <span>Tilt down when zooming out</span>
@@ -215,8 +223,9 @@
     <div id="help" hidden>
       <h2>Controls</h2>
       <table>
-        <tr><td>↑ / ↓</td><td>Climb / dive</td></tr>
-        <tr><td>← / →</td><td>Bank and turn</td></tr>
+        <tr><td>↑ / ↓</td><td>Nose up / down (hold for a loop)</td></tr>
+        <tr><td>← / →</td><td>Roll left / right (hold to roll right round)</td></tr>
+        <tr><td>Q / E</td><td>Rudder: nose left / right</td></tr>
         <tr><td>Shift</td><td>More throttle (W / S: throttle up / down)</td></tr>
         <tr><td>Mouse wheel</td><td>Zoom in and out</td></tr>
         <tr><td>Drag</td><td>Tilt and turn the view (right-click puts it back)</td></tr>

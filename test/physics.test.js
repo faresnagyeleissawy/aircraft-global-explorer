@@ -17,14 +17,52 @@ function run(updater, s, input, seconds, ground) {
   for (let t = 0; t < seconds; t += dt) updater(s, input, dt, ground);
 }
 
-test("plane climbs with up arrow and banks right with right arrow", () => {
+test("plane climbs with up arrow, and banks and turns right with right arrow", () => {
   const s = createState(LON, LAT, 300, 0);
   s.speed = 70;
-  run(updatePlane, s, { ...noKeys, up: true }, 2, flat);
-  assert.ok(s.height > 300, "climbed");
-  run(updatePlane, s, { ...noKeys, right: true }, 2, flat);
-  assert.ok(s.roll > 0.5, "banked right");
-  assert.ok(s.heading > 0 && s.heading < Math.PI, "turned right");
+  run(updatePlane, s, { ...noKeys, up: true }, 1, flat);
+  assert.ok(s.height > 300 && s.pitch > 0.5, "climbed");
+  const t = createState(LON, LAT, 3000, 0);
+  t.speed = 70;
+  run(updatePlane, t, { ...noKeys, right: true }, 0.4, flat);
+  assert.ok(t.roll > 0.5 && t.roll < 0.9, "banked right: " + t.roll);
+  run(updatePlane, t, { ...noKeys, up: true }, 1, flat);
+  assert.ok(t.heading > 0.2 && t.heading < Math.PI / 2, "turned right: " + t.heading);
+});
+
+test("plane loops with the up arrow held, and rolls right round with the right arrow", () => {
+  const s = createState(LON, LAT, 3000, 0);
+  s.speed = 150;
+  s.throttle = 1;
+  let wasUpsideDown = false;
+  let wasVertical = false;
+  const dt = 1 / 60;
+  for (let time = 0; time < (2 * Math.PI) / 0.9 + 0.2; time += dt) {
+    updatePlane(s, { ...noKeys, up: true }, dt, flat);
+    if (s.u[2] < -0.9) wasUpsideDown = true;
+    if (s.pitch > 1.4) wasVertical = true;
+  }
+  assert.ok(wasVertical && wasUpsideDown, "went up, over the top and upside down");
+  assert.ok(Math.abs(s.pitch) < 0.4, "came back round to level: " + s.pitch);
+
+  const r = createState(LON, LAT, 3000, 0);
+  r.speed = 150;
+  let inverted = false;
+  for (let time = 0; time < (2 * Math.PI) / 1.8; time += dt) {
+    updatePlane(r, { ...noKeys, right: true }, dt, flat);
+    if (Math.abs(r.roll) > 3) inverted = true;
+  }
+  assert.ok(inverted, "rolled upside down on the way");
+  assert.ok(Math.abs(r.roll) < 0.3, "and back upright: " + r.roll);
+});
+
+test("with assist, the wings level out when the keys are let go", () => {
+  const s = createState(LON, LAT, 3000, 0);
+  s.speed = 100;
+  run(updatePlane, s, { ...noKeys, right: true }, 0.5, flat);
+  assert.ok(s.roll > 0.5);
+  run(updatePlane, s, { ...noKeys, assist: true }, 4, flat);
+  assert.ok(Math.abs(s.roll) < 0.05, "level again: " + s.roll);
 });
 
 test("plane dives with down arrow and speeds up with Shift", () => {
@@ -106,7 +144,7 @@ test("helicopter comes down fast from high up and slows near the ground", () => 
   assert.equal(s.grounded, true);
 });
 
-test("the jet is faster than the plane and turns tighter", () => {
+test("the jet is faster than the plane, rolls quicker and turns tighter", () => {
   const plane = createState(LON, LAT, 3000, 0);
   plane.speed = 150;
   plane.throttle = 1;
@@ -121,7 +159,31 @@ test("the jet is faster than the plane and turns tighter", () => {
   p.speed = 200;
   const j = createState(LON, LAT, 3000, 0);
   j.speed = 200;
-  run(updatePlane, p, { ...noKeys, right: true }, 3, flat);
-  run(updateJet, j, { ...noKeys, right: true }, 3, flat);
-  assert.ok(j.heading > p.heading * 2, "jet turned " + j.heading + ", plane " + p.heading);
+  run(updatePlane, p, { ...noKeys, right: true }, 0.3, flat);
+  run(updateJet, j, { ...noKeys, right: true }, 0.3, flat);
+  assert.ok(j.roll > p.roll * 1.8, "jet rolled " + j.roll + ", plane " + p.roll);
+
+  // Same bank, same speed: the jet comes round faster.
+  const pb = createState(LON, LAT, 3000, 0);
+  const jb = createState(LON, LAT, 3000, 0);
+  for (const s of [pb, jb]) {
+    s.speed = 200;
+    s.roll = 0.7;
+  }
+  run(updatePlane, pb, noKeys, 2, flat);
+  run(updateJet, jb, noKeys, 2, flat);
+  assert.ok(jb.heading > pb.heading * 2, "jet turned " + jb.heading + ", plane " + pb.heading);
+});
+
+test("with assist, holding the up arrow still loops", () => {
+  const s = createState(LON, LAT, 3000, 0);
+  s.speed = 150;
+  s.throttle = 1;
+  let wasUpsideDown = false;
+  const dt = 1 / 60;
+  for (let time = 0; time < 8; time += dt) {
+    updatePlane(s, { ...noKeys, up: true, assist: true }, dt, flat);
+    if (s.u[2] < -0.9) wasUpsideDown = true;
+  }
+  assert.ok(wasUpsideDown, "went over the top");
 });

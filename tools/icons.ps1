@@ -60,3 +60,26 @@ Draw-Icon 192 0.06 "icon-192.png"
 Draw-Icon 512 0.14 "icon-maskable-512.png"
 Draw-Icon 180 0.08 "apple-touch-icon.png"
 Write-Output "icons written to $out"
+
+# Feature graphic for the Google Play listing (1024 x 500): the icon and the name.
+$feature = New-Object System.Drawing.Bitmap 1024, 500
+$g = [System.Drawing.Graphics]::FromImage($feature)
+$g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+$g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+$area = New-Object System.Drawing.Rectangle 0, 0, 1024, 500
+$sky = New-Object System.Drawing.Drawing2D.LinearGradientBrush $area, ([System.Drawing.Color]::FromArgb(11, 29, 51)), ([System.Drawing.Color]::FromArgb(31, 92, 143)), 20.0
+$g.FillRectangle($sky, $area)
+$icon = [System.Drawing.Image]::FromFile((Join-Path $out "icon-512.png"))
+$g.DrawImage($icon, 60, 90, 320, 320)
+$icon.Dispose()
+$white = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
+$yellow = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(240, 180, 41))
+$g.DrawString("Aircraft Global", (New-Object System.Drawing.Font "Segoe UI", 52, ([System.Drawing.FontStyle]::Bold)), $white, 410, 130)
+$g.DrawString("Explorer", (New-Object System.Drawing.Font "Segoe UI", 52, ([System.Drawing.FontStyle]::Bold)), $yellow, 410, 205)
+$g.DrawString("Fly anywhere on Earth in 3D", (New-Object System.Drawing.Font "Segoe UI", 24), $white, 416, 300)
+$store = Join-Path $PSScriptRoot "..\store"
+New-Item -ItemType Directory -Force $store | Out-Null
+$feature.Save((Join-Path $store "feature-graphic.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+$g.Dispose()
+$feature.Dispose()
+Write-Output "feature graphic written to $store"

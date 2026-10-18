@@ -184,10 +184,13 @@ input {
 
 .links {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
+  gap: 6px 10px;
 }
 
-button.link {
+button.link,
+a.link {
   background: none;
   border: none;
   color: var(--muted);

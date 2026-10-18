@@ -53,6 +53,9 @@ const params = new URLSearchParams(window.location.search);
 const SIMPLE = params.has("simple");
 const OFFLINE = SIMPLE || params.has("offline");
 const STREET_MAP_URL = "https://tile.openstreetmap.org/";
+// Esri's World Imagery: satellite photos that need no Cesium ion token.
+const SATELLITE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const GROUND_KEY = "dubai3d.ground";
 
 const PLANE_SPAWN_HEIGHT = 350;
 const HELI_SPAWN_HEIGHT = 150;
@@ -266,14 +269,30 @@ async function startGame() {
   } else {
     scene.globe.baseColor = Cesium.Color.fromCssColorString("#c9b98f");
     if (SIMPLE) {
-      viewer.imageryLayers.addImageryProvider(
-        new Cesium.OpenStreetMapImageryProvider({ url: STREET_MAP_URL, maximumLevel: 18 })
-      );
       // The other choices in this menu need a token.
       $("data-select").disabled = true;
       $("data-select").title = "3D buildings need a Cesium ion token: use Change token below";
     }
     if (ultra) applyUltra(viewer, null);
+  }
+
+  // The map drawn on the ground: satellite photos, the same with place
+  // names, or the street map. Without a token the photos come from Esri and
+  // there is no labelled version; with Google's tiles there is no ground.
+  const groundChoice = $("ground-select");
+  if (dataMode === "google" || (OFFLINE && !SIMPLE)) {
+    groundChoice.disabled = true;
+  } else {
+    if (OFFLINE) groundChoice.querySelector('[value="labels"]').disabled = true;
+    const saved = storageGet(GROUND_KEY);
+    const fallback = OFFLINE ? "streets" : "satellite";
+    groundChoice.value = saved && !groundChoice.querySelector('[value="' + saved + '"]').disabled ? saved : fallback;
+    setGround(viewer, groundChoice.value);
+    groundChoice.addEventListener("change", (e) => {
+      storageSet(GROUND_KEY, e.target.value);
+      setGround(viewer, e.target.value);
+      e.target.blur();
+    });
   }
 
   if (!scene.sampleHeightSupported) {
@@ -282,6 +301,26 @@ async function startGame() {
 
   const game = createGame(viewer, dataMode, { facade, terrain: terrainReady ? await terrainReady : null });
   game.start();
+}
+
+// ---------------------------------------------------------------- map on the ground
+
+// Puts the chosen map on the ground: "satellite", "labels" (satellite with
+// place names) or "streets".
+function setGround(viewer, kind) {
+  let layer;
+  if (kind === "streets") {
+    layer = new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({ url: STREET_MAP_URL, maximumLevel: 19 }));
+  } else if (OFFLINE) {
+    const credit = new Cesium.Credit("Satellite imagery © Esri, Maxar, Earthstar Geographics");
+    layer = new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({ url: SATELLITE_URL, maximumLevel: 19, credit }));
+  } else {
+    const style = kind === "labels" ? Cesium.IonWorldImageryStyle.AERIAL_WITH_LABELS : Cesium.IonWorldImageryStyle.AERIAL;
+    layer = Cesium.ImageryLayer.fromWorldImagery({ style });
+  }
+  viewer.imageryLayers.removeAll();
+  viewer.imageryLayers.add(layer);
+  window.dispatchEvent(new CustomEvent("groundchange", { detail: kind }));
 }
 
 // ---------------------------------------------------------------- graphics
@@ -1120,6 +1159,10 @@ function createGame(viewer, dataMode, world) {
       ? createMinimap(window.L, $("minimap"), (lon, lat) => travelTo(lon, lat, state.heading))
       : null;
   let minimapTime = 0;
+  if (minimap) {
+    minimap.setStyle($("ground-select").value === "streets" ? "streets" : "satellite");
+    window.addEventListener("groundchange", (e) => minimap.setStyle(e.detail === "streets" ? "streets" : "satellite"));
+  }
 
   function setMinimapOpen(open) {
     $("minimap-box").classList.toggle("closed", !open);

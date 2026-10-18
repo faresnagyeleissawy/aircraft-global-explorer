@@ -43,6 +43,7 @@ const QUALITY_KEY = "dubai3d.quality";
 const MINIMAP_KEY = "dubai3d.minimap";
 const SAVED_KEY = "dubai3d.saved";
 const ASSIST_KEY = "dubai3d.assist";
+const BUTTONS_KEY = "dubai3d.buttons";
 const INVERT_KEY = "dubai3d.invert";
 const CHASE_EASE = 4; // how quickly the chase camera swings round after the aircraft, per second
 const TILT_KEY = "dubai3d.tilt";
@@ -1202,6 +1203,20 @@ function createGame(viewer, dataMode, world) {
   }
 
   // ------------------------------------------------------------ touch controls
+
+  // The flight buttons show on touch screens by themselves; the menu can
+  // also show them always (for flying with the mouse) or never.
+  function setButtons(mode) {
+    document.body.classList.toggle("buttons-on", mode === "on");
+    document.body.classList.toggle("buttons-off", mode === "off");
+    $("buttons-select").value = mode;
+  }
+  setButtons(["on", "off"].includes(storageGet(BUTTONS_KEY)) ? storageGet(BUTTONS_KEY) : "auto");
+  $("buttons-select").addEventListener("change", (e) => {
+    storageSet(BUTTONS_KEY, e.target.value === "auto" ? null : e.target.value);
+    setButtons(e.target.value);
+    e.target.blur();
+  });
 
   // On-screen buttons stand in for the keyboard: held ones for the arrow keys
   // and Shift, tapped ones for the other keys and for the zoom.

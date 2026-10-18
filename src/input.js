@@ -10,6 +10,7 @@ const KEY_MAP = {
   ShiftRight: "boost",
   KeyW: "throttleUp",
   KeyS: "throttleDown",
+  KeyF: "forward",
   KeyQ: "yawLeft",
   KeyE: "yawRight",
 };
@@ -23,6 +24,7 @@ export function createInput(onAction) {
     boost: false,
     throttleUp: false,
     throttleDown: false,
+    forward: false,
     yawLeft: false,
     yawRight: false,
   };

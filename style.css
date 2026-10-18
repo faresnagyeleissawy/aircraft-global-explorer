@@ -912,9 +912,17 @@ body.menu-closed #panel {
   grid-column: 1 / 4;
 }
 
-/* A helicopter goes up and down with the Power buttons; Faster is for the plane. */
-body.heli #touch .plane-only {
-  display: none;
+#touch .forward {
+  background: #1f6f43;
+}
+
+/* Chosen in the menu: the flight buttons always, or never. */
+body.buttons-on #touch {
+  display: block !important;
+}
+
+body.buttons-off #touch {
+  display: none !important;
 }
 
 /* Phones, tablets and narrow windows: buttons to fly with, and room for them. */
@@ -1059,5 +1067,17 @@ body.heli #touch .plane-only {
   #window-frame div {
     width: 74vw;
     height: 56dvh;
+  }
+}
+
+/* Flight buttons shown on a wide screen: keep the small map and the place
+   card clear of them. */
+@media (min-width: 761px) {
+  body.buttons-on #minimap-box {
+    bottom: 200px;
+  }
+
+  body.buttons-on #place-card {
+    bottom: 214px;
   }
 }

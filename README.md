@@ -30,12 +30,15 @@ Go to **Settings → Pages** in the repository and choose "Deploy from a branch"
 | ↑ / ↓ | Nose up / down; hold for a loop |
 | ← / → | Roll left / right; hold to roll right round |
 | Q / E | Rudder: nose left / right |
+| F or ⏩ Forward | Go forward: more thrust in the plane and the jet, forward flight in the helicopter |
 | Shift | More throttle |
 | Mouse wheel | Zoom in and out |
 | Drag | Tilt and turn the view around the plane |
 | Right-click or ⟲ Level | Put the view back behind the aircraft, level |
 | Click | Show the name and address of that building or spot |
 | Double-click | Fly to that spot on the map |
+
+The green ⏩ Forward button (or F) makes any aircraft go forward. "On-screen flight buttons" in the menu shows the buttons on a computer too, for flying with the mouse, or hides them on a touch screen.
 
 On a phone or tablet the game shows its own buttons: an arrow pad to steer, Faster for more throttle, View, Auto for the autopilot, and ＋ / － to zoom. The ☰ button opens and closes the menu, which starts closed on a small screen. Dragging a finger looks around and a double tap flies to that spot.
 

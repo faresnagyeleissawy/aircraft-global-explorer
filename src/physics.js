@@ -129,7 +129,8 @@ export function updatePlane(s, input, dt, ground, model = PLANE) {
     setBasis(s);
   }
 
-  if (input.throttleUp || input.boost) s.throttle = clamp(s.throttle + 0.5 * dt, 0, 1);
+  // Forward (F, or the Forward button) opens the throttle, like W and Shift.
+  if (input.throttleUp || input.boost || input.forward) s.throttle = clamp(s.throttle + 0.5 * dt, 0, 1);
   if (input.throttleDown) s.throttle = clamp(s.throttle - 0.5 * dt, 0, 1);
   const drag = model.thrust / (model.maxSpeed * model.maxSpeed);
   s.speed += (model.thrust * s.throttle - drag * s.speed * s.speed - GRAVITY * s.f[2]) * dt;
@@ -203,7 +204,8 @@ export function updateHeli(s, input, dt, ground) {
   s.heading = wrapAngle(s.heading + turn * HELI.turnRate * dt);
 
   const arrows = (input.up ? 1 : 0) - (input.down ? 1 : 0);
-  const forward = input.boost ? 0 : arrows;
+  // Forward (F, or the Forward button) flies forward, like the up arrow.
+  const forward = clamp((input.boost ? 0 : arrows) + (input.forward ? 1 : 0), -1, 1);
   const lift = clamp((input.boost ? arrows : 0) + (input.throttleUp ? 1 : 0) - (input.throttleDown ? 1 : 0), -1, 1);
 
   const target = forward > 0 ? HELI.maxSpeed : forward < 0 ? HELI.maxReverse : 0;

@@ -187,3 +187,19 @@ test("with assist, holding the up arrow still loops", () => {
   }
   assert.ok(wasUpsideDown, "went over the top");
 });
+
+test("the forward control speeds up every aircraft", () => {
+  const plane = createState(LON, LAT, 3000, 0);
+  plane.speed = 70;
+  run(updatePlane, plane, { ...noKeys, forward: true }, 3, flat);
+  assert.ok(plane.throttle > 0.9, "plane throttle opened: " + plane.throttle);
+
+  const jet = createState(LON, LAT, 3000, 0);
+  jet.speed = 150;
+  run(updateJet, jet, { ...noKeys, forward: true }, 3, flat);
+  assert.ok(jet.throttle > 0.9, "jet throttle opened");
+
+  const heli = createState(LON, LAT, 100, 0);
+  run(updateHeli, heli, { ...noKeys, forward: true }, 3, flat);
+  assert.ok(heli.speed > 10 && heli.lat > LAT, "helicopter flew forward");
+});

@@ -118,6 +118,14 @@ function storageSet(key, value) {
   }
 }
 
+// ---------------------------------------------------------------- app
+
+// The service worker lets the game be installed on a phone or computer as an
+// app ("Add to Home screen" / "Install").
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  navigator.serviceWorker.register("sw.js").catch((err) => console.warn("The app could not be made installable", err));
+}
+
 // ---------------------------------------------------------------- menu
 
 // The panel can be folded away. On a narrow screen it starts folded, and

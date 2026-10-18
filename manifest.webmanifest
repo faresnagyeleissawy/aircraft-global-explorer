@@ -1,0 +1,19 @@
+{
+  "name": "Aircraft Global Explorer",
+  "short_name": "Aircraft Explorer",
+  "description": "Fly a plane or a helicopter over the real world in 3D, or ride a flight between two airports.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#0b1d33",
+  "theme_color": "#12161c",
+  "categories": ["games", "travel", "navigation"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -25,6 +25,8 @@ const TYPES = {
   ".json": "application/json; charset=utf-8",
   ".glb": "model/gltf-binary",
   ".md": "text/markdown; charset=utf-8",
+  ".webmanifest": "application/manifest+json",
+  ".png": "image/png",
 };
 
 const cache = new Map();

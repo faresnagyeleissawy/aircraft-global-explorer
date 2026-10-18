@@ -958,7 +958,7 @@ function createGame(viewer, dataMode, world) {
 
   // Changes between the plane and the helicopter where the player is now.
   function setVehicle(next) {
-    if (next === vehicle) return;
+    if (!CHASE[next] || next === vehicle) return; // an aircraft this version does not know
     vehicle = next;
     storageSet(VEHICLE_KEY, next === "plane" ? null : next);
     $("vehicle-select").value = next;
@@ -1841,7 +1841,7 @@ function createGame(viewer, dataMode, world) {
 
     // Zooming out also tilts the camera down, towards a map-like view from above.
     // Dragging the mouse adds its own turn and tilt, from straight down to a little upwards.
-    const chase = CHASE[vehicle];
+    const chase = CHASE[vehicle] || CHASE.plane;
     // Optionally, zooming out also tilts the camera down towards a map-like view.
     const zoomTilt = $("tilt-zoom").checked ? Math.max(-1.3, chase.pitch - Math.max(0, Math.log(zoom)) * 0.3) : chase.pitch;
     const pitch = Math.min(0.3, Math.max(-1.5, zoomTilt + orbit.pitch));
@@ -1877,7 +1877,7 @@ function createGame(viewer, dataMode, world) {
     ];
 
     // Behind and a little above, swung round by any mouse drag.
-    const range = CHASE[vehicle].range * zoom;
+    const range = (CHASE[vehicle] || CHASE.plane).range * zoom;
     let back = chaseF.map((x, i) => -x * range + chaseU[i] * range * 0.2);
     back = rotateVector(back, chaseU, -orbit.heading);
     back = rotateVector(back, right, orbit.pitch);

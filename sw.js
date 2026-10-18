@@ -1,9 +1,11 @@
-// Service worker: lets the game be installed as an app and opens it quickly
-// next time. The game's own files are kept in a cache and refreshed in the
-// background; map data and the libraries from other sites always come from
-// the network, since the game needs a connection to fly anyway.
+// Service worker: lets the game be installed as an app. The game's own files
+// always come fresh from the network when it can be reached, checked against
+// the server rather than any older copy the browser holds, so a new version
+// never mixes with pieces of the old one; the cached copies are only used when
+// there is no connection. Map data and the libraries from other sites always
+// come from the network, since the game needs a connection to fly anyway.
 
-const CACHE = "aircraft-explorer-v1";
+const CACHE = "aircraft-explorer-v2";
 const FILES = [
   "./",
   "index.html",
@@ -42,21 +44,22 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// The game's files: from the cache straight away, updated from the network
-// for next time ("stale while revalidate"). Everything else: network only.
+// The game's files: network first ("no-cache" makes the browser check with
+// the server), the saved copy when offline. Everything else: network only.
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== self.location.origin || url.pathname.includes("/api/")) return;
   event.respondWith(
     caches.open(CACHE).then(async (cache) => {
-      const cached = await cache.match(event.request, { ignoreSearch: true });
-      const fresh = fetch(event.request)
-        .then((response) => {
-          if (response.ok) cache.put(event.request, response.clone());
-          return response;
-        })
-        .catch(() => cached);
-      return cached || fresh;
+      try {
+        const response = await fetch(event.request, { cache: "no-cache" });
+        if (response.ok) cache.put(event.request, response.clone());
+        return response;
+      } catch {
+        const cached = await cache.match(event.request, { ignoreSearch: true });
+        if (cached) return cached;
+        throw new Error("offline and not saved: " + url.pathname);
+      }
     })
   );
 });

@@ -15,14 +15,34 @@
 
     <button type="button" id="menu-toggle" aria-label="Menu" aria-controls="panel" title="Menu">☰</button>
 
+    <!-- Search bar, like a map site's: always on screen, next to the menu button. -->
+    <form id="search-form" role="search">
+      <input id="search-input" type="search" autocomplete="off" placeholder="Search an address or place" aria-label="Search an address or place" />
+      <button type="submit" aria-label="Search" title="Search">🔍</button>
+      <button type="button" id="saved-toggle" aria-label="Saved places" title="Saved places">★</button>
+    </form>
+
+    <div id="saved" hidden>
+      <div class="head">
+        <strong>Saved places</strong>
+        <button type="button" id="save-here">＋ Save this spot</button>
+      </div>
+      <ul id="saved-list"></ul>
+      <p id="saved-empty">Nothing saved yet. Save the spot you are flying over, or press ☆ Save on a place you searched for.</p>
+    </div>
+
+    <div id="place-card" hidden>
+      <button type="button" id="place-close" aria-label="Close" title="Close">✕</button>
+      <strong id="place-name"></strong>
+      <span id="place-coords"></span>
+      <div class="row">
+        <button type="button" id="place-save">☆ Save</button>
+        <button type="button" id="place-trip">✈ Trip here</button>
+      </div>
+    </div>
+
     <div id="panel">
       <div class="title">Aircraft Global Explorer</div>
-      <form id="search-form">
-        <div class="row">
-          <input id="search-input" type="search" autocomplete="off" placeholder="Search any place in the world" aria-label="Search any place in the world" />
-          <button type="submit">Go</button>
-        </div>
-      </form>
       <label>
         Famous places
         <select id="place-select"></select>
@@ -71,6 +91,10 @@
           <option value="left">Left window seat</option>
           <option value="right">Right window seat</option>
         </select>
+      </label>
+      <label class="check" title="Off: the camera keeps its angle when you zoom out">
+        <input type="checkbox" id="tilt-zoom" />
+        <span>Tilt down when zooming out</span>
       </label>
       <label class="check">
         <input type="checkbox" id="flights-toggle" checked />
@@ -153,6 +177,7 @@
 
     <div id="time-bar" hidden>
       <button type="button" id="pause" title="Pause (P or Space)">⏸ Pause</button>
+      <button type="button" id="level-view" title="Put the view back behind the aircraft, level (right-click)">⟲ Level</button>
       <span class="label">Speed</span>
       <button type="button" data-speed="1" class="active" title="Real time">1×</button>
       <button type="button" data-speed="2">2×</button>
@@ -182,6 +207,7 @@
         <tr><td>Double-click</td><td>Fly to that spot on the map</td></tr>
         <tr><td>1 / 2</td><td>Plane / helicopter</td></tr>
         <tr><td>Helicopter</td><td>↑ / ↓ forward and back, ← / → turn, W / S (or Shift with ↑ / ↓) up and down. Without keys it hovers; come down slowly to land.</td></tr>
+        <tr><td>Right-click or ⟲ Level</td><td>Put the view back behind the aircraft, level</td></tr>
         <tr><td>P or Space</td><td>Pause and carry on</td></tr>
         <tr><td>M</td><td>Show or hide the small map; click it to fly to that spot</td></tr>
       </table>

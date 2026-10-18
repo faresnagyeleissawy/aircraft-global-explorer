@@ -40,6 +40,9 @@ const DATA_KEY = "dubai3d.data";
 const PLACE_KEY = "dubai3d.place";
 const QUALITY_KEY = "dubai3d.quality";
 const MINIMAP_KEY = "dubai3d.minimap";
+const SAVED_KEY = "dubai3d.saved";
+const TILT_KEY = "dubai3d.tilt";
+const MAX_SAVED = 50;
 const FREE_MAX_SPEED = 5; // flying by hand, the game cannot keep up with more than this
 const MINIMAP_EVERY = 250; // ms between moves of the plane on the small map
 
@@ -379,6 +382,8 @@ function createGame(viewer, dataMode, world) {
   let route = null; // active point-to-point route, see route.js
   let routeEntities = [];
   let info = null; // label left by the last click on the map
+  let pin = null; // marks the last place searched for
+  let shownPlace = null; // the place on the place card
   let infoTimer = 0;
   let flashText = "";
   let flashUntil = 0;
@@ -419,6 +424,7 @@ function createGame(viewer, dataMode, world) {
     exclude.length = 0;
     exclude.push(plane, ...helicopter.primitives, ...routeEntities, ...flights.entities);
     if (info) exclude.push(info);
+    if (pin) exclude.push(pin);
   }
   refreshExclude();
 
@@ -751,6 +757,148 @@ function createGame(viewer, dataMode, world) {
     e.currentTarget.blur();
   });
 
+  // ------------------------------------------------------------ places: pin, card and saved places
+
+  const readSaved = () => {
+    try {
+      const list = JSON.parse(storageGet(SAVED_KEY) || "[]");
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  };
+  const writeSaved = (list) => storageSet(SAVED_KEY, JSON.stringify(list.slice(0, MAX_SAVED)));
+  const coordsText = (p) => p.lat.toFixed(5) + ", " + p.lon.toFixed(5);
+
+  // A red pin on the place, and a card about it, as a map site shows after a search.
+  function showPlace(place) {
+    if (pin) viewer.entities.remove(pin);
+    pin = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(place.lon, place.lat),
+      point: {
+        pixelSize: 16,
+        color: Cesium.Color.fromCssColorString("#e53935"),
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 3,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: place.name.split(", ")[0],
+        font: "600 14px sans-serif",
+        showBackground: true,
+        pixelOffset: new Cesium.Cartesian2(0, -24),
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+    refreshExclude();
+    shownPlace = place;
+    $("place-name").textContent = place.name;
+    $("place-coords").textContent = coordsText(place);
+    $("place-save").textContent = readSaved().some((s) => s.name === place.name) ? "★ Saved" : "☆ Save";
+    $("place-card").hidden = false;
+  }
+
+  function closePlace() {
+    if (pin) viewer.entities.remove(pin);
+    pin = null;
+    shownPlace = null;
+    $("place-card").hidden = true;
+    refreshExclude();
+  }
+
+  function savePlace(place) {
+    const list = readSaved().filter((s) => s.name !== place.name);
+    list.unshift({ name: place.name, lon: place.lon, lat: place.lat });
+    writeSaved(list);
+    renderSaved();
+  }
+
+  function renderSaved() {
+    const list = readSaved();
+    $("saved-empty").hidden = list.length > 0;
+    $("saved-list").replaceChildren(
+      ...list.map((place, i) => {
+        const line = document.createElement("li");
+        const go = document.createElement("button");
+        go.type = "button";
+        go.className = "go";
+        go.textContent = place.name;
+        go.title = "Fly there";
+        go.addEventListener("click", async () => {
+          $("saved").hidden = true;
+          await travelTo(place.lon, place.lat, state.heading);
+          showPlace(place);
+        });
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "remove";
+        remove.textContent = "✕";
+        remove.title = "Remove";
+        remove.setAttribute("aria-label", "Remove " + place.name);
+        remove.addEventListener("click", () => {
+          const left = readSaved();
+          left.splice(i, 1);
+          writeSaved(left);
+          renderSaved();
+        });
+        line.append(go, remove);
+        return line;
+      })
+    );
+  }
+
+  $("saved-toggle").addEventListener("click", (e) => {
+    renderSaved();
+    $("saved").hidden = !$("saved").hidden;
+    e.currentTarget.blur();
+  });
+  $("save-here").addEventListener("click", (e) => {
+    const spot = here();
+    const over = $("hud-address").textContent.replace(/^Over: /, "");
+    savePlace({ name: over || coordsText(spot), lon: spot.lon, lat: spot.lat });
+    e.currentTarget.blur();
+  });
+  // A press outside the saved-places list puts it away.
+  document.addEventListener("pointerdown", (e) => {
+    if (!$("saved").hidden && !$("saved").contains(e.target) && e.target !== $("saved-toggle")) $("saved").hidden = true;
+  });
+
+  $("place-close").addEventListener("click", closePlace);
+  $("place-save").addEventListener("click", (e) => {
+    if (!shownPlace) return;
+    savePlace(shownPlace);
+    $("place-save").textContent = "★ Saved";
+    e.currentTarget.blur();
+  });
+  $("place-trip").addEventListener("click", (e) => {
+    const to = shownPlace;
+    e.currentTarget.blur();
+    if (!to) return;
+    $("place-card").hidden = true;
+    // The trip starts where the plane is now: a short way back from the place.
+    runNav(() => startTrip({ ...here(), name: "Here" }, to));
+  });
+
+  // The camera's tilt when zooming out is optional, and off unless chosen.
+  $("tilt-zoom").checked = storageGet(TILT_KEY) === "1";
+  $("tilt-zoom").addEventListener("change", (e) => {
+    storageSet(TILT_KEY, e.target.checked ? "1" : null);
+    e.target.blur();
+  });
+
+  // ⟲ Level: the view straight behind the aircraft again, as a right-click does.
+  function levelView() {
+    orbit = { heading: 0, pitch: 0 };
+    zoom = 1;
+    if (view !== "chase") setView("chase");
+  }
+  $("level-view").addEventListener("click", (e) => {
+    levelView();
+    e.currentTarget.blur();
+  });
+
   // ------------------------------------------------------------ aircraft
 
   // Changes between the plane and the helicopter where the player is now.
@@ -896,6 +1044,8 @@ function createGame(viewer, dataMode, world) {
       console.error(err);
       status.classList.add("error");
       status.textContent = err && err.message ? err.message : String(err);
+      // The menu may be folded away, as on a phone: say it in the middle too.
+      if (document.body.classList.contains("menu-closed")) flash(status.textContent, 4);
     }
     buttons.forEach((b) => (b.disabled = false));
     if (document.activeElement) document.activeElement.blur();
@@ -917,6 +1067,7 @@ function createGame(viewer, dataMode, world) {
         return found.length + " places found. Choose one from the list.";
       }
       await travelTo(found[0].lon, found[0].lat, state.heading);
+      showPlace(found[0]);
       return "Moved to " + found[0].name;
     });
   });
@@ -1342,8 +1493,7 @@ function createGame(viewer, dataMode, world) {
   canvas.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     if (picking) return;
-    orbit = { heading: 0, pitch: 0 };
-    zoom = 1;
+    levelView();
   });
   canvas.addEventListener(
     "wheel",
@@ -1621,7 +1771,8 @@ function createGame(viewer, dataMode, world) {
     // Zooming out also tilts the camera down, towards a map-like view from above.
     // Dragging the mouse adds its own turn and tilt, from straight down to a little upwards.
     const chase = CHASE[vehicle];
-    const zoomTilt = Math.max(-1.3, chase.pitch - Math.max(0, Math.log(zoom)) * 0.3);
+    // Optionally, zooming out also tilts the camera down towards a map-like view.
+    const zoomTilt = $("tilt-zoom").checked ? Math.max(-1.3, chase.pitch - Math.max(0, Math.log(zoom)) * 0.3) : chase.pitch;
     const pitch = Math.min(0.3, Math.max(-1.5, zoomTilt + orbit.pitch));
     orbit.pitch = pitch - zoomTilt; // so a drag past the limit does not have to be undone first
     const target = Cesium.Cartesian3.fromRadians(state.lon, state.lat, state.height);

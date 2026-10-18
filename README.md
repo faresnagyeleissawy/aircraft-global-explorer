@@ -32,17 +32,19 @@ Go to **Settings → Pages** in the repository and choose "Deploy from a branch"
 | Shift | More throttle |
 | Mouse wheel | Zoom in and out |
 | Drag | Tilt and turn the view around the plane |
-| Right-click | Put the view back behind the plane |
+| Right-click or ⟲ Level | Put the view back behind the aircraft, level |
 | Click | Show the name and address of that building or spot |
 | Double-click | Fly to that spot on the map |
 
 On a phone or tablet the game shows its own buttons: an arrow pad to steer, Faster for more throttle, View, Auto for the autopilot, and ＋ / － to zoom. The ☰ button opens and closes the menu, which starts closed on a small screen. Dragging a finger looks around and a double tap flies to that spot.
 
-The arrow keys and Shift are all you need. W and S also work for throttle up and down. V changes the view, A turns the autopilot on and off during a trip, R takes you back to the start point, B flies to Burj Khalifa, and H shows or hides the controls. Zooming a long way out tilts the camera down to a map-like view.
+The arrow keys and Shift are all you need. W and S also work for throttle up and down. V changes the view, A turns the autopilot on and off during a trip, R takes you back to the start point, B flies to Burj Khalifa, and H shows or hides the controls. Zooming out keeps the camera's angle; tick "Tilt down when zooming out" in the menu to have it tilt towards a map-like view instead.
 
 ## Search, routes and Burj Khalifa
 
-- **Search** moves you to any address or place in the world. While you type, a list of matching places appears; pick one with the mouse, a finger, or the arrow keys and Enter. Pressing Go without picking searches for what you typed and lists up to eight matching addresses to choose from; a single match is gone to straight away. You can also type coordinates as `lat, lon`.
+- **Search bar**: at the top of the screen, as on a map site, and always there. It moves you to any address or place in the world, puts a red pin on it and shows a card with its name, coordinates, ☆ Save and ✈ Trip here (a flight from where you are to that place).
+- **Saved places**: the ★ button next to the search bar lists your saved places. Click one to fly there, ✕ to remove it, and "＋ Save this spot" saves where you are flying now. They are kept in your browser.
+- **Search** results: While you type, a list of matching places appears; pick one with the mouse, a finger, or the arrow keys and Enter. Pressing Go without picking searches for what you typed and lists up to eight matching addresses to choose from; a single match is gone to straight away. You can also type coordinates as `lat, lon`.
 - **Start screen**: the game opens by asking where to fly. Search for a place, type X (longitude) and Y (latitude), or pick a famous place, then press Start flying. "New start" in the panel brings the screen back.
 - **Demo tour**: "Watch the demo tour" on the start screen, or "Demo" at the bottom of the panel, plays a three-minute scripted tour with captions: the city, a search, the window and pilot seats, live flights, and a trip from Dubai to Abu Dhabi with take-off and landing. It is meant for recording a video of the game. Esc stops it.
 - **Trips**: type two airport codes (DXB, LHR) or places on the start screen, or in "Trip from / to" in the panel. The plane flies the trip on autopilot along the path a real flight takes: it climbs to cruising height, cruises at about 900 km/h and comes down at the other end. A bar at the bottom shows how far you are and how much flying is left. The speed buttons make the flight pass up to 60 times faster. Touch an arrow key to take the controls, and press A to give them back to the autopilot. Between two places that are not airports, "Trip from / to" still draws the road route.

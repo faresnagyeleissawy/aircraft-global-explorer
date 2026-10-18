@@ -46,7 +46,8 @@ export const PLANE = {
   thrust: 6, // m/s² at full throttle
   pitchRate: 0.9, // rad/s with the stick held, at flying speed
   rollRate: 1.8,
-  yawRate: 0.35,
+  turnRate: 0.35, // rad/s with ← / → held
+  turnBank: 0.6, // how far it leans into a turn
   clearance: 2,
   turnBoost: 1, // how hard the wings pull round in a bank, as a multiple of a gentle turn
 };
@@ -59,7 +60,8 @@ export const JET = {
   thrust: 30,
   pitchRate: 1.6,
   rollRate: 4.0,
-  yawRate: 0.5,
+  turnRate: 0.7,
+  turnBank: 1.0,
   clearance: 3,
   turnBoost: 5,
 };
@@ -117,8 +119,10 @@ function readBasis(s) {
   s.attitude = [s.heading, s.pitch, s.roll];
 }
 
-// ↑ / ↓ pitch the nose up and down, ← / → roll, Q / E yaw. Held, they keep
-// turning, so the plane can loop, roll right round and fly upside down. With
+// ↑ / ↓ pitch the nose up and down: held, the plane loops. ← / → turn left
+// and right: the plane leans into the turn and comes round. Rolling is its
+// own control (Q / E): held, the plane rolls right round and can fly upside
+// down. With
 // input.assist the wings and nose come back to level when the keys are let go.
 // Thrust (W / S, Shift) and gravity set the speed: climbing slows the plane,
 // diving speeds it up, and below its stall speed the nose drops.
@@ -139,18 +143,24 @@ export function updatePlane(s, input, dt, ground, model = PLANE) {
   // Controls bite less when slow.
   const grip = clamp(s.speed / (model.stallSpeed * 1.5), 0.2, 1);
   const pitchIn = (input.up ? 1 : 0) - (input.down ? 1 : 0);
-  const rollIn = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-  const yawIn = (input.yawRight ? 1 : 0) - (input.yawLeft ? 1 : 0);
+  const turnIn = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  const rollIn = (input.rollRight ? 1 : 0) - (input.rollLeft ? 1 : 0);
   turnAll(s, s.r, pitchIn * model.pitchRate * grip * dt);
   turnAll(s, s.f, rollIn * model.rollRate * grip * dt);
-  turnAll(s, s.u, -yawIn * model.yawRate * grip * dt);
+  if (turnIn && !rollIn) {
+    // Lean over to the turn's bank, and come round: right turn, heading up.
+    readBasis(s);
+    const lean = clamp(turnIn * model.turnBank - s.roll, -model.rollRate * dt, model.rollRate * dt);
+    turnAll(s, s.f, lean);
+    turnAll(s, [0, 0, 1], -turnIn * model.turnRate * grip * dt);
+  }
 
   readBasis(s);
   if (input.assist) {
     // Let go, and the wings level out and the nose comes back towards the horizon.
     // Only when nothing is held and the nose is not near the vertical: in a
     // loop, going over the top turns the plane upside down, and that is fine.
-    if (!rollIn && !pitchIn && Math.abs(s.pitch) < 1) turnAll(s, s.f, -s.roll * Math.min(1, dt * 1.5));
+    if (!rollIn && !turnIn && !pitchIn && Math.abs(s.pitch) < 1) turnAll(s, s.f, -s.roll * Math.min(1, dt * 1.5));
     if (!pitchIn && Math.abs(s.roll) < Math.PI / 2) turnAll(s, s.r, -s.pitch * Math.min(1, dt * 0.4));
   }
 

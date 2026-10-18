@@ -897,6 +897,19 @@ body.menu-closed #panel {
   grid-area: 3 / 2;
 }
 
+#touch .roll-left {
+  grid-area: 1 / 1;
+}
+
+#touch .roll-right {
+  grid-area: 1 / 3;
+}
+
+/* The helicopter does not roll over. */
+body.heli #touch .plane-only {
+  display: none;
+}
+
 #touch .side {
   right: 12px;
   display: grid;

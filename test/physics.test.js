@@ -17,20 +17,23 @@ function run(updater, s, input, seconds, ground) {
   for (let t = 0; t < seconds; t += dt) updater(s, input, dt, ground);
 }
 
-test("plane climbs with up arrow, and banks and turns right with right arrow", () => {
+test("plane climbs with the up arrow, and leans and turns right with the right arrow", () => {
   const s = createState(LON, LAT, 300, 0);
   s.speed = 70;
   run(updatePlane, s, { ...noKeys, up: true }, 1, flat);
   assert.ok(s.height > 300 && s.pitch > 0.5, "climbed");
   const t = createState(LON, LAT, 3000, 0);
   t.speed = 70;
-  run(updatePlane, t, { ...noKeys, right: true }, 0.4, flat);
-  assert.ok(t.roll > 0.5 && t.roll < 0.9, "banked right: " + t.roll);
-  run(updatePlane, t, { ...noKeys, up: true }, 1, flat);
-  assert.ok(t.heading > 0.2 && t.heading < Math.PI / 2, "turned right: " + t.heading);
+  run(updatePlane, t, { ...noKeys, right: true }, 2, flat);
+  assert.ok(t.roll > 0.4 && t.roll < 0.7, "leaned into the turn, not rolled over: " + t.roll);
+  assert.ok(t.heading > 0.5 && t.heading < Math.PI, "came round to the right: " + t.heading);
+  const l = createState(LON, LAT, 3000, 0);
+  l.speed = 70;
+  run(updatePlane, l, { ...noKeys, left: true }, 2, flat);
+  assert.ok(l.heading > Math.PI && l.heading < 2 * Math.PI - 0.5, "and to the left: " + l.heading);
 });
 
-test("plane loops with the up arrow held, and rolls right round with the right arrow", () => {
+test("plane loops with the up arrow held, and rolls right round with E held", () => {
   const s = createState(LON, LAT, 3000, 0);
   s.speed = 150;
   s.throttle = 1;
@@ -49,7 +52,7 @@ test("plane loops with the up arrow held, and rolls right round with the right a
   r.speed = 150;
   let inverted = false;
   for (let time = 0; time < (2 * Math.PI) / 1.8; time += dt) {
-    updatePlane(r, { ...noKeys, right: true }, dt, flat);
+    updatePlane(r, { ...noKeys, rollRight: true }, dt, flat);
     if (Math.abs(r.roll) > 3) inverted = true;
   }
   assert.ok(inverted, "rolled upside down on the way");
@@ -59,7 +62,7 @@ test("plane loops with the up arrow held, and rolls right round with the right a
 test("with assist, the wings level out when the keys are let go", () => {
   const s = createState(LON, LAT, 3000, 0);
   s.speed = 100;
-  run(updatePlane, s, { ...noKeys, right: true }, 0.5, flat);
+  run(updatePlane, s, { ...noKeys, rollRight: true }, 0.5, flat);
   assert.ok(s.roll > 0.5);
   run(updatePlane, s, { ...noKeys, assist: true }, 4, flat);
   assert.ok(Math.abs(s.roll) < 0.05, "level again: " + s.roll);
@@ -159,8 +162,8 @@ test("the jet is faster than the plane, rolls quicker and turns tighter", () => 
   p.speed = 200;
   const j = createState(LON, LAT, 3000, 0);
   j.speed = 200;
-  run(updatePlane, p, { ...noKeys, right: true }, 0.3, flat);
-  run(updateJet, j, { ...noKeys, right: true }, 0.3, flat);
+  run(updatePlane, p, { ...noKeys, rollRight: true }, 0.3, flat);
+  run(updateJet, j, { ...noKeys, rollRight: true }, 0.3, flat);
   assert.ok(j.roll > p.roll * 1.8, "jet rolled " + j.roll + ", plane " + p.roll);
 
   // Same bank, same speed: the jet comes round faster.
@@ -202,4 +205,21 @@ test("the forward control speeds up every aircraft", () => {
   const heli = createState(LON, LAT, 100, 0);
   run(updateHeli, heli, { ...noKeys, forward: true }, 3, flat);
   assert.ok(heli.speed > 10 && heli.lat > LAT, "helicopter flew forward");
+});
+
+test("the jet turns left and right faster than the plane, and rolls without turning", () => {
+  const p = createState(LON, LAT, 3000, 0);
+  p.speed = 200;
+  const j = createState(LON, LAT, 3000, 0);
+  j.speed = 200;
+  run(updatePlane, p, { ...noKeys, right: true }, 1.5, flat);
+  run(updateJet, j, { ...noKeys, right: true }, 1.5, flat);
+  assert.ok(j.heading > p.heading * 1.5, "jet came round " + j.heading + ", plane " + p.heading);
+
+  // A full roll on Q / E ends pointing the same way it started.
+  const r = createState(LON, LAT, 3000, 0);
+  r.speed = 200;
+  run(updateJet, r, { ...noKeys, rollRight: true }, (2 * Math.PI) / 4.0, flat);
+  const heading = Math.min(r.heading, 2 * Math.PI - r.heading);
+  assert.ok(heading < 0.25, "still heading about north: " + r.heading);
 });

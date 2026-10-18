@@ -1,4 +1,4 @@
-// Movement models for the plane and the helicopter. Pure functions with no Cesium imports, so
+// Movement models for the plane, the fighter jet and the helicopter. Pure functions with no Cesium imports, so
 // they can be unit tested in Node with a fake ground function.
 //
 // Angles are radians. heading: 0 = north, clockwise. lon/lat: radians.
@@ -16,6 +16,19 @@ export const PLANE = {
   maxPitch: 0.6,
   maxRoll: 0.8,
   clearance: 2,
+  turnBoost: 1, // how hard it pulls in a banked turn, as a multiple of a gentle turn
+};
+
+// A fighter in the style of the F-35: much faster, steeper and tighter.
+export const JET = {
+  minSpeed: 70,
+  maxSpeed: 550, // about Mach 1.6
+  stallSpeed: 75,
+  pitchRate: 1.0,
+  maxPitch: 1.2,
+  maxRoll: 1.3,
+  clearance: 3,
+  turnBoost: 5,
 };
 
 export function offset(lon, lat, distance, heading) {
@@ -49,7 +62,8 @@ export function createState(lon, lat, height, heading = 0) {
   };
 }
 
-export function updatePlane(s, input, dt, ground) {
+export function updatePlane(s, input, dt, ground, model = PLANE) {
+  const PLANE = model;
   if (s.crashed) return;
   if (input.throttleUp || input.boost) s.throttle = clamp(s.throttle + 0.5 * dt, 0, 1);
   if (input.throttleDown) s.throttle = clamp(s.throttle - 0.5 * dt, 0, 1);
@@ -69,7 +83,7 @@ export function updatePlane(s, input, dt, ground) {
 
   const rollInput = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   s.roll += (rollInput * PLANE.maxRoll - s.roll) * Math.min(1, dt * 2.5);
-  s.heading = wrapAngle(s.heading + ((GRAVITY * Math.tan(s.roll)) / Math.max(s.speed, 20)) * dt);
+  s.heading = wrapAngle(s.heading + ((GRAVITY * Math.tan(s.roll) * PLANE.turnBoost) / Math.max(s.speed, 20)) * dt);
 
   const horizontal = s.speed * Math.cos(s.pitch) * dt;
   let vertical = s.speed * Math.sin(s.pitch) * dt;
@@ -161,4 +175,9 @@ export function updateHeli(s, input, dt, ground) {
     s.grounded = true;
     if (forward === 0) s.speed *= 1 - Math.min(1, dt * 3); // skids do not slide
   }
+}
+
+// The fighter jet flies like the plane, with the numbers in JET.
+export function updateJet(s, input, dt, ground) {
+  updatePlane(s, input, dt, ground, JET);
 }

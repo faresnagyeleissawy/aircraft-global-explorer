@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createState, updatePlane, updateHeli, offset } from "../src/physics.js";
+import { createState, updatePlane, updateHeli, updateJet, offset } from "../src/physics.js";
 
 const rad = (d) => (d * Math.PI) / 180;
 const LON = rad(55.27);
@@ -104,4 +104,24 @@ test("helicopter comes down fast from high up and slows near the ground", () => 
   run(updateHeli, s, { ...noKeys, throttleDown: true }, 60, flat);
   assert.equal(s.crashed, false, "slowed down in time to land");
   assert.equal(s.grounded, true);
+});
+
+test("the jet is faster than the plane and turns tighter", () => {
+  const plane = createState(LON, LAT, 3000, 0);
+  plane.speed = 150;
+  plane.throttle = 1;
+  const jet = createState(LON, LAT, 3000, 0);
+  jet.speed = 150;
+  jet.throttle = 1;
+  run(updatePlane, plane, noKeys, 20, flat);
+  run(updateJet, jet, noKeys, 20, flat);
+  assert.ok(jet.speed > plane.speed * 1.5, "jet " + jet.speed + " vs plane " + plane.speed);
+
+  const p = createState(LON, LAT, 3000, 0);
+  p.speed = 200;
+  const j = createState(LON, LAT, 3000, 0);
+  j.speed = 200;
+  run(updatePlane, p, { ...noKeys, right: true }, 3, flat);
+  run(updateJet, j, { ...noKeys, right: true }, 3, flat);
+  assert.ok(j.heading > p.heading * 2, "jet turned " + j.heading + ", plane " + p.heading);
 });

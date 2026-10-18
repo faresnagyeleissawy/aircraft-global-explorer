@@ -22,6 +22,7 @@ const FILES = [
   "src/suggest.js",
   "src/minimap.js",
   "src/helicopter.js",
+  "src/jet.js",
   "data/airports.json",
   "data/runways.json",
   "models/Cesium_Air.glb",

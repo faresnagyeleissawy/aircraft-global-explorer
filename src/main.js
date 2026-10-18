@@ -1,5 +1,6 @@
-import { createState, updatePlane, updateHeli, offset } from "./physics.js";
+import { createState, updatePlane, updateHeli, updateJet, offset } from "./physics.js";
 import { createHelicopter } from "./helicopter.js";
+import { createJet } from "./jet.js";
 import { PLACES } from "./places.js";
 import { createInput } from "./input.js";
 import { PUBLIC_ION_TOKEN } from "./config.js";
@@ -65,6 +66,7 @@ const VEHICLE_KEY = "dubai3d.vehicle";
 const CHASE = {
   plane: { range: 45, pitch: -0.18 },
   heli: { range: 26, pitch: -0.24 },
+  jet: { range: 42, pitch: -0.15 },
 };
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 40;
@@ -461,15 +463,18 @@ function createGame(viewer, dataMode, world) {
     show: false,
   });
   // "plane" or "heli": which aircraft is flown by hand. Trips are always the plane.
-  let vehicle = storageGet(VEHICLE_KEY) === "heli" ? "heli" : "plane";
+  // "plane", "jet" or "heli": which aircraft is flown by hand. Trips are always the plane.
+  let vehicle = ["heli", "jet"].includes(storageGet(VEHICLE_KEY)) ? storageGet(VEHICLE_KEY) : "plane";
   const helicopter = createHelicopter(Cesium, viewer, () => state);
+  const jet = createJet(Cesium, viewer, () => state);
+  const START_SPEED = { plane: 70, jet: 150, heli: 0 }; // a helicopter arrives hovering
   const flights = createFlights(Cesium, viewer, FLIGHTS_URL);
   const exclude = [];
 
   // Our own models, lines and labels must not count as ground under the player.
   function refreshExclude() {
     exclude.length = 0;
-    exclude.push(plane, ...helicopter.primitives, ...routeEntities, ...flights.entities);
+    exclude.push(plane, ...helicopter.primitives, ...jet.primitives, ...routeEntities, ...flights.entities);
     if (info) exclude.push(info);
     if (pin) exclude.push(pin);
   }
@@ -716,7 +721,7 @@ function createGame(viewer, dataMode, world) {
   // Starts a flight from one place to another along the line a real flight
   // takes, on autopilot: the traveller watches, or takes over with the arrows.
   async function startTrip(from, to) {
-    if (vehicle === "heli") setVehicle("plane"); // trips are flown by the plane
+    if (vehicle !== "plane") setVehicle("plane"); // trips are flown by the plane
     const length = distance(from, to);
     if (length < 2000) throw new Error("Those two places are too close together for a flight.");
     // With the advanced option, and a runway known at both ends, the trip
@@ -952,10 +957,10 @@ function createGame(viewer, dataMode, world) {
   function setVehicle(next) {
     if (next === vehicle) return;
     vehicle = next;
-    storageSet(VEHICLE_KEY, next === "heli" ? "heli" : null);
+    storageSet(VEHICLE_KEY, next === "plane" ? null : next);
     $("vehicle-select").value = next;
     document.body.classList.toggle("heli", next === "heli");
-    if (trip && next === "heli") {
+    if (trip && next !== "plane") {
       clearRoute(); // trips are flown by the plane
       $("nav-status").textContent = "";
     }
@@ -965,16 +970,16 @@ function createGame(viewer, dataMode, world) {
     state.vz = 0;
     state.pitch = 0;
     state.roll = 0;
-    if (next === "plane") {
+    if (next !== "heli") {
       // A plane cannot hover: give it height and speed to fly with.
       const g = sampleGround(state.lon, state.lat);
       if (g !== undefined && state.height - g < 150) state.height = g + 150;
-      state.speed = 70;
+      state.speed = Math.max(state.speed, START_SPEED[next]);
       state.throttle = 0.4;
     } else {
       state.speed = Math.min(state.speed, 40);
     }
-    flash(next === "heli" ? "Helicopter: W / S or Power to go up and down" : "Plane", 3);
+    flash({ heli: "Helicopter: W / S or Power to go up and down", jet: "F-35: Shift or Power + for full thrust", plane: "Plane" }[next], 3);
   }
 
   $("vehicle-select").value = vehicle;
@@ -1622,6 +1627,7 @@ function createGame(viewer, dataMode, world) {
     else if (code === "KeyA") setAutopilot(!autopilot);
     else if (code === "KeyP" || code === "Space") setPaused(!paused);
     else if (code === "Digit1") setVehicle("plane");
+    else if (code === "Digit3") setVehicle("jet");
     else if (code === "Digit2") setVehicle("heli");
     else if (code === "KeyM") setMinimapOpen($("minimap-box").classList.contains("closed"));
     else if (code === "KeyR") spawn();
@@ -1680,7 +1686,7 @@ function createGame(viewer, dataMode, world) {
     camHeading = heading;
     crashTimer = 0;
     lastGround = undefined;
-    state.speed = vehicle === "heli" ? 0 : 70; // a helicopter arrives hovering
+    state.speed = START_SPEED[vehicle];
     showMessage("");
   }
 
@@ -1728,7 +1734,7 @@ function createGame(viewer, dataMode, world) {
         state.crashed = false;
         crashTimer = 0;
         state.height = (g !== undefined ? g : state.height) + 200;
-        state.speed = vehicle === "heli" ? 0 : 70;
+        state.speed = START_SPEED[vehicle];
         state.vz = 0;
         state.pitch = 0;
         state.roll = 0;
@@ -1768,7 +1774,7 @@ function createGame(viewer, dataMode, world) {
     } else {
       // Faster by taking several ordinary steps per frame.
       const steps = Math.min(timeScale, FREE_MAX_SPEED);
-      const fly = vehicle === "heli" ? updateHeli : updatePlane;
+      const fly = { plane: updatePlane, jet: updateJet, heli: updateHeli }[vehicle];
       for (let i = 0; i < steps && !state.crashed; i++) fly(state, input, dt, sampleGround);
       flownScale = steps;
       if (state.crashed) showMessage("Crashed! Respawning…");
@@ -1788,6 +1794,8 @@ function createGame(viewer, dataMode, world) {
     plane.show = view === "chase" && vehicle === "plane";
     helicopter.update(dt);
     helicopter.setShown(view === "chase" && vehicle === "heli");
+    jet.update();
+    jet.setShown(view === "chase" && vehicle === "jet");
   }
 
   function updateCamera(dt) {
@@ -1878,7 +1886,7 @@ function createGame(viewer, dataMode, world) {
     const agl = ground !== undefined ? Math.max(0, Math.round(state.height - ground)) : null;
     $("hud-alt").textContent = agl !== null ? agl + " m above ground" : "—";
     $("hud-throttle").textContent =
-      vehicle === "plane"
+      vehicle !== "heli"
         ? "Throttle " + Math.round(state.throttle * 100) + "%"
         : state.grounded
           ? "Landed"
